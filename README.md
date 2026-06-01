@@ -38,13 +38,7 @@
 
 ## Challenge Slides
 
-### Challenge Introduction
-
 [Add link to the challenge introduction slides.]
-
-### Deep Dive Session
-
-[Add link to the deep dive session slides.]
 
 ## Resources & Further Information
 
