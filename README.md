@@ -14,10 +14,6 @@ Design and build an AI-powered Dynamic Risk Profiling System that monitors real-
 
 The challenge explores how AI can support proactive risk monitoring in a regulated banking environment while ensuring security, explainability, and strong governance. At its core is a real-time risk intelligence engine that continuously monitors public signals — news and public-domain information, corporate events, legal or regulatory signals, sanctions and adverse media, and market or operational risks — and combines them with internal inputs such as KYC data, customer profiles, AML transaction screening, risk ratings, and internal monitoring signals. From these inputs it generates early risk alerts, fraud warnings, risk scoring, compliance insights, and actionable recommendations.
 
-## Potential Users *(Optional)*
-
-[Describe who the solution should be tailored for.]
-
 ## Use Cases
 
 Reference risk signals and the flags a strong system should raise (examples):
@@ -41,16 +37,16 @@ Each flag should be paired with a recommended action, such as triggering enhance
 
 A working AI system built around a two-layer approach:
 
-- **Layer 1 — Public Real-Time Intelligence (non-sensitive, primary focus):** capture a wide range of signals from public sources (news, domain changes, funding announcements, company websites and scraping, Crunchbase / funding news, government registries where accessible, sanctions lists, adverse media, registry/legal updates).
+- **Layer 1 — Public Real-Time Intelligence (non-sensitive, primary focus):** capture a wide range of signals from public sources (news, domain changes, funding announcements, company websites and scraping, Crunchbase/funding news, government registries where accessible, sanctions lists, adverse media, registry/legal updates).
 - **Layer 2 — Simulated Internal Bank Intelligence (sensitive):** pick a real public company/startup and define a baseline KYC profile as if the bank had onboarded them (expected business model, expected activity and transaction volumes, risk rating), then use it to narrow down the public signals.
 
 Teams must also design a security and governance framework, including: data separation between public and internal data, encryption, secure APIs, role-based access control, data masking, and audit logs; model guardrails such as human-in-the-loop validation, explainable AI, confidence scores, source citations, output restrictions, and bias/hallucination checks; and a decision-governance layer with risk approval workflows, compliance review, manual validation, escalation, and approval checkpoints.
 
-## Technology *(Optional)*
+## Technology
 
 ### Available Technology
 
-Public sources participants can draw on include news and public-domain information, company websites (with scraping), Crunchbase / funding news, government registries (where accessible), sanctions lists (OFAC, EU), and adverse media.
+Public sources participants can draw on include news and public-domain information, company websites (with scraping), Crunchbase/funding news, government registries (where accessible), sanctions lists (OFAC, EU), and adverse media.
 
 ### Expected or Suggested Tech Stack
 
@@ -84,11 +80,14 @@ Guardrails are central to this challenge: models must not make incorrect assumpt
 
 ### Contact Person(s)
 
-[Add name(s) of point(s) of contact.]
+| Name |
+|---|
+| Jürgen Hofbauer |
+| Marcin Nowrot |
 
 ### Availability
 
-[Add availability during the event, for example agenda if in person, or email/contact details if remote support is available throughout the weekend.]
+In person throughout the event (SwissHacks, Zurich, 19 to 21 June 2026). Mentors will be on-site on the evening of 19 June after the presentations, and on 20 June from 9:00 to 12:00.
 
 ## Prize
 
