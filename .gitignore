@@ -12,13 +12,6 @@ venv/
 env/
 ENV/
 
-# Pipeline output / generated data
-pipeline/news-feed/news.json
-pipeline/news-feed/*.json
-pipeline/news-feed/candidate_articles.json
-pipeline/news-feed/articles_raw.json
-pipeline/news-feed/articles_clean.json
-
 # Environment / secrets
 .env
 .env.*
