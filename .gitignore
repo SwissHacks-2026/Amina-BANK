@@ -1,0 +1,23 @@
+# secrets — NEVER commit these
+**/.env
+**/.env.local
+.env
+.env.*
+!**/.env.example
+
+# node
+node_modules/
+dist/
+build/
+*.log
+npm-debug.log*
+pnpm-debug.log*
+yarn-error.log*
+
+# os / editor
+.DS_Store
+.vscode/
+.idea/
+
+# generated synthetic data (regenerated from generators; optional to keep)
+backend/data/generated/*.json
