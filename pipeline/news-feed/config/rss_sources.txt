@@ -24,8 +24,6 @@ https://search.cnbc.com/rs/search/combinedcms/view.xml?partnerId=wrss01&id=15839
 https://search.cnbc.com/rs/search/combinedcms/view.xml?partnerId=wrss01&id=10000664
 #Health and science
 https://search.cnbc.com/rs/search/combinedcms/view.xml?partnerId=wrss01&id=10000108
-#Travel
-https://search.cnbc.com/rs/search/combinedcms/view.xml?partnerId=wrss01&id=10000739
 
 # Associated Press
 https://news.google.com/rss/search?q=site:apnews.com+business&hl=en-US&gl=US&ceid=US:en
