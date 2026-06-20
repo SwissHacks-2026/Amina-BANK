@@ -26,11 +26,13 @@ interface DriftSignal {
   published_at?: string;
   clean_text?: string;
   text?: string;
+  full_text?: string;
+  summary?: string;
 }
 interface CompanyReport {
   company_id: string;
   legal_name: string;
-  signals: DriftSignal[];
+  signals?: DriftSignal[];
 }
 
 const DEFAULT_PATH = new URL("../../../scrapers/news-feed/kyc_drift_signals.json", import.meta.url);
@@ -43,11 +45,11 @@ export function loadDriftSignals(path: URL | string = DEFAULT_PATH): Record<stri
 
   for (const co of report) {
     const signals: RawSignal[] = [];
-    co.signals.forEach((s, i) => {
+    (co.signals ?? []).forEach((s, i) => {
       const category = DIMENSION_TO_CATEGORY[s.dimension];
       if (!category) return; // unknown dimension → skip
       const linked = (s.linked_entities ?? []).map((e) => `${e.name} (${e.role})`).join("; ");
-      const body = s.clean_text ?? s.text ?? s.title ?? "";
+      const body = s.full_text ?? s.summary ?? s.clean_text ?? s.text ?? s.title ?? "";
       signals.push({
         signalId: `news-${co.company_id}-${i}`,
         clientId: co.company_id,
