@@ -167,20 +167,44 @@ export async function loadSignals(clientId: string): Promise<RawSignal[]> {
 
 ---
 
-## 6. 24h 갱신 흐름
+## 6. 24h 갱신 흐름 — 구현됨, 테스트 가능
 
 ```
-스케줄러(24h마다)
-  → 스크래퍼 실행 (Giulio 뉴스 / Alice 등기 / Kiara 제재)
-  → RawSignal로 변환
-  → saveSignal()로 DB INSERT (fetched_at = now())
+scheduler (INGEST_INTERVAL_MS, 기본 24h)
+  → ingestToDb(): kycAdapter + newsAdapter 로 어댑터 읽기
+  → saveBaseline() + saveSignal() 로 DB 기록 (signals 전체 갱신, fetched_at=now())
 
-대시보드/파이프라인 요청 시
-  → loadSignals(clientId)로 DB에서 SELECT
-  → runPipeline()에 넣어 점수화
+대시보드/파이프라인
+  → loadSignals(clientId) 로 DB SELECT → runPipeline()
 ```
 
-스케줄러는 cron이나 `node-cron` 패키지로 만들면 됨. (별도 작업)
+### 테스트 (짧은 간격으로 24h 흐름 확인)
+
+```bash
+cd backend
+# 0) Postgres 실행 + DATABASE_URL .env에 설정 (위 2~3절)
+npm run db:init                       # 테이블 생성
+
+# 1) 한 번 적재
+npm run db:ingest
+#   → "Ingested 10 baselines and N signals into Postgres."
+
+# 2) DB에 들어갔나 확인
+npm run db:status
+#   → signals: N rows, latest fetch <시각>
+#     kyc_baselines: 10 rows, latest update <시각>
+
+# 3) 주기 갱신 테스트 (24h 대신 10초 간격으로)
+INGEST_INTERVAL_MS=10000 npm run scheduler
+#   → 즉시 1회 + 10초마다 재적재. 다른 터미널에서 npm run db:status 로
+#     latest fetch 시각이 갱신되는지 확인. Ctrl+C로 중단.
+```
+
+> 실서비스에선 `INGEST_INTERVAL_MS`를 비우면 24h(86,400,000ms)로 돌아갑니다.
+> pgAdmin Query Tool에서 `SELECT count(*), max(fetched_at) FROM signals;` 로도 확인 가능.
+
+⚠️ 지금은 스크래퍼가 만든 **JSON 파일**을 어댑터가 읽어 DB에 넣습니다. 스크래퍼(Giulio/Alice/Kiara)가
+**직접 DB에 쓰게** 바꾸려면 각 Python에서 `psycopg2`로 `INSERT` 하면 됩니다 (다음 단계).
 
 ---
 

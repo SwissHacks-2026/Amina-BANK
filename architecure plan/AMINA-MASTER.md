@@ -74,13 +74,24 @@ magic = both contribute to the same weighted sum.
 | Stage | Analogy | Model | Cost | Runs on |
 |---|---|---|---|---|
 | Hard gate | 수배자 명단 | exact/fuzzy name match | free | everyone, first |
-| Stage 1 | 체온계 | rules + embeddings (+ Giulio gemma3:4b) | free/local | everyone |
-| Stage 2 | 피검사 | Claude Haiku 4.5 | cheap paid | flagged only |
-| Stage 3 | MRI | Claude Sonnet 4.6 | expensive paid | HIGH only |
+| Stage 1 | 체온계 | rules + embeddings (+ Giulio gemma3:4b pre-filter) | free/local | everyone |
+| Stage 2 | 피검사 | **local gemma3:4b (free) OR Claude Haiku 4.5** | free or cheap | flagged only |
+| Stage 3 | MRI | **local gemma OR Claude Sonnet 4.6** | free or paid | HIGH only |
 
-**EN.** Don't run the expensive model on everyone. Cheap filters drop most; only ~the risky few
-reach paid models. This is the challenge's explicitly-judged **cost efficiency** (20%).
-**KR.** 비싼 모델을 전원에게 쓰면 돈 폭탄. 싼 필터가 대부분 거르고 위험한 소수만 유료 모델로.
+**EN.** Don't run the expensive model on everyone. Cheap filters drop most; only the risky few reach
+the reasoning models. This is the challenge's explicitly-judged **cost efficiency** (20%).
+
+**LLM modes (per-stage, via env — see `llm.ts`):** `OLLAMA_MODEL` runs a stage on a **free local
+model**; `ANTHROPIC_API_KEY` runs it on Claude; absent both → deterministic stub. `STAGE2_PROVIDER` /
+`STAGE3_PROVIDER` force a stage. **Three modes:**
+- **All-free:** `OLLAMA_MODEL=gemma3:4b` → Stage 2 & 3 both local, $0.
+- **Hybrid (recommended):** `OLLAMA_MODEL=gemma3:4b` + `ANTHROPIC_API_KEY` + `STAGE3_PROVIDER=anthropic`
+  → Stage 2 free local (high volume), Stage 3 Claude (quality where it matters).
+- **All-quality:** `ANTHROPIC_API_KEY` only.
+The Jury reuses this: prosecutor/defense on the Stage-2 tier, judge on the Stage-3 tier.
+
+**KR.** Stage 2는 **무료 로컬 gemma 또는 유료 Haiku 둘 다 지원** — env로 선택. 권장은 **하이브리드**
+(Stage 2 로컬 무료 + Stage 3 Claude 고품질). 비싼 모델은 위험한 소수만.
 
 Cost tier order (cheapest first):
 ```
@@ -419,7 +430,8 @@ sanctions → hard gate; per-signal HITL (validate/dismiss/note); dashboard Demo
 banner); **per-stage hybrid LLM** (Stage 2 local gemma / Stage 3 Claude, policy via
 STAGE2_PROVIDER/STAGE3_PROVIDER); **TSLM-lite** time-series summary injected into Stage 3;
 **drift taxonomy expanded to 19 categories** (weights + recommended actions + archetypes);
-**adversarial Jury** on HIGH cases (prosecutor vs defense → judge, policy-gated `riskPolicy.jury`).
+**adversarial Jury** on HIGH cases (prosecutor vs defense → judge, policy-gated `riskPolicy.jury`);
+**Postgres 24h ingestion** (`db:ingest` / `scheduler` / `db:status`, interval via INGEST_INTERVAL_MS).
 
 **🔜 My TODOs:** run Giulio `signal_extractor.py` → kyc_drift_signals.json; run Kiara
 `screen_portfolio.py` → sanctions_hits.json; scrapers → Postgres + 24h scheduler; demo script +

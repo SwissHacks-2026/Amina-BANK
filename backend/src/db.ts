@@ -16,6 +16,11 @@ export async function pingDb(): Promise<boolean> {
   }
 }
 
+/** Delete all stored signals (used for a full refresh cycle). */
+export async function clearSignals(): Promise<void> {
+  await pool.query("DELETE FROM signals");
+}
+
 /** Save one collected signal (called by the scraper adapters). */
 export async function saveSignal(s: RawSignal): Promise<void> {
   await pool.query(
