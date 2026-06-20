@@ -47,7 +47,7 @@
   },
 
   "embeddingGate": {
-    "_doc": "a narrative signal escalates to Stage 2 if baselineSim < baselineSimMax OR maxArchetypeSim > archetypeSimMin.",
+    "_doc": "a narrative signal escalates to Stage 2 if baselineSim < baselineSimMax OR maxArchetypeSim > archetypeSimMin. NOTE: these thresholds are calibrated for simpleEmbed. With EMBED_BACKEND=transformers (real sentence-transformers) similarity runs on a lower scale — recalibrate, e.g. baselineSimMax≈0.45, archetypeSimMin≈0.35.",
     "baselineSimMax": 0.6,
     "archetypeSimMin": 0.55
   },

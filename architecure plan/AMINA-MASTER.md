@@ -434,7 +434,10 @@ banner); **per-stage hybrid LLM** (Stage 2 local gemma / Stage 3 Claude, policy 
 STAGE2_PROVIDER/STAGE3_PROVIDER); **TSLM-lite** time-series summary injected into Stage 3;
 **drift taxonomy expanded to 19 categories** (weights + recommended actions + archetypes);
 **adversarial Jury** on HIGH cases (prosecutor vs defense → judge, policy-gated `riskPolicy.jury`);
-**Postgres 24h ingestion** (`db:ingest` / `scheduler` / `db:status`, interval via INGEST_INTERVAL_MS).
+**Postgres 24h ingestion** (`db:ingest` / `scheduler` / `db:status`, interval via INGEST_INTERVAL_MS);
+**Apertus** (Swiss LLM) provider + backend landing page + per-signal approve/reject/escalate;
+**real semantic embeddings** option via Transformers.js (`EMBED_BACKEND=transformers`,
+all-MiniLM-L6-v2, free local — recalibrate gate thresholds for its lower scale).
 
 **🔜 My TODOs:** set up Postgres + test the ingestion flow (`db:init` → `db:ingest` → `db:status`);
 run Giulio `signal_extractor.py` → kyc_drift_signals.json; run Kiara `screen_portfolio.py` →

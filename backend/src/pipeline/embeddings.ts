@@ -57,16 +57,43 @@ export async function voyageEmbed(text: string): Promise<number[]> {
 }
 
 /**
- * Unified entry point. Uses Voyage when a key is present, else simpleEmbed.
- * The rest of the pipeline only ever calls this — swapping backends is invisible.
+ * Option A2 — Transformers.js (local sentence-transformers, all-MiniLM-L6-v2). Free, no key,
+ * runs in Node. Real semantic embeddings (384-dim). Model downloads (~25MB) on first use.
+ * Enable with EMBED_BACKEND=transformers.
+ */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+let extractor: any = null;
+async function getExtractor(): Promise<(t: string, o: object) => Promise<{ data: Float32Array }>> {
+  if (!extractor) {
+    const { pipeline } = await import("@xenova/transformers");
+    extractor = await pipeline("feature-extraction", "Xenova/all-MiniLM-L6-v2");
+  }
+  return extractor;
+}
+
+export async function transformersEmbed(text: string): Promise<number[]> {
+  const ext = await getExtractor();
+  const out = await ext(text, { pooling: "mean", normalize: true });
+  return Array.from(out.data);
+}
+
+/**
+ * Unified entry point. Priority: Voyage (key) > Transformers.js (EMBED_BACKEND=transformers)
+ * > simpleEmbed. The rest of the pipeline only ever calls this — swapping backends is invisible.
  */
 export async function embed(text: string): Promise<number[]> {
   if (process.env.VOYAGE_API_KEY) {
     try {
       return await voyageEmbed(text);
     } catch {
-      // graceful fallback for the demo — never let embeddings hard-fail the pipeline
-      return simpleEmbed(text);
+      /* fall through to a local backend */
+    }
+  }
+  if (process.env.EMBED_BACKEND === "transformers") {
+    try {
+      return await transformersEmbed(text);
+    } catch (e) {
+      console.warn(`[embed] transformers failed (${(e as Error).message}); using simpleEmbed.`);
     }
   }
   return simpleEmbed(text);
