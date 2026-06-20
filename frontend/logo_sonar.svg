@@ -1,0 +1,13 @@
+
+  <svg viewBox="0 0 100 100" className={className} fill="none" stroke="currentColor">
+    {/* Point central (La banque / Le système) */}
+    <circle cx="50" cy="75" r="4" fill="currentColor" />
+    {/* Ondes de balayage public */}
+    <path d="M 35 75 A 15 15 0 0 1 65 75" strokeWidth="4" strokeLinecap="round" />
+    <path d="M 20 75 A 30 30 0 0 1 80 75" strokeWidth="4" strokeLinecap="round" opacity="0.5" />
+    <path d="M 5 75 A 45 45 0 0 1 95 75" strokeWidth="4" strokeLinecap="round" opacity="0.2" />
+    {/* L'Anomalie (Le KYC Drift détecté) */}
+    <circle cx="70" cy="40" r="6" fill="currentColor" />
+    {/* Ligne de ciblage */}
+    <path d="M 50 75 L 70 40" strokeWidth="2" strokeDasharray="4 4" />
+  </svg>

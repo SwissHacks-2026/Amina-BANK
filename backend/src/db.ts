@@ -3,6 +3,7 @@
 // See backend/DATABASE.md for setup.
 import { Pool } from "pg";
 import type { ClientBaseline, RawSignal, SignalCategory } from "./types.js";
+import { normName, type SanctionsHit } from "./ingest/sanctionsAdapter.js";
 
 export const pool = new Pool({ connectionString: process.env.DATABASE_URL });
 
@@ -83,6 +84,40 @@ export async function saveBaseline(baseline: ClientBaseline): Promise<void> {
      ON CONFLICT (client_id) DO UPDATE SET data = $2, updated_at = now()`,
     [baseline.clientId, JSON.stringify(baseline)],
   );
+}
+
+/** Delete all stored sanctions hits (full refresh of the watchlist). */
+export async function clearSanctionsHits(): Promise<void> {
+  await pool.query("DELETE FROM sanctions_hits");
+}
+
+/** Upsert one sanctions watchlist hit (keyed by normalized name). */
+export async function saveSanctionsHit(h: SanctionsHit): Promise<void> {
+  await pool.query(
+    `INSERT INTO sanctions_hits (norm_name, query, matched_entity, score, source, jurisdiction)
+     VALUES ($1, $2, $3, $4, $5, $6)
+     ON CONFLICT (norm_name) DO UPDATE SET
+       query = $2, matched_entity = $3, score = $4, source = $5, jurisdiction = $6, fetched_at = now()`,
+    [normName(h.query), h.query, h.matchedEntity, h.score, h.source, h.jurisdiction ?? null],
+  );
+}
+
+/** Load the whole sanctions watchlist from the DB, keyed by normalized name. */
+export async function loadAllSanctionsHits(): Promise<Map<string, SanctionsHit>> {
+  const map = new Map<string, SanctionsHit>();
+  const { rows } = await pool.query(
+    "SELECT norm_name, query, matched_entity, score, source, jurisdiction FROM sanctions_hits",
+  );
+  for (const r of rows) {
+    map.set(r.norm_name as string, {
+      query: r.query as string,
+      matchedEntity: (r.matched_entity ?? r.query) as string,
+      score: Number(r.score ?? 100),
+      source: (r.source ?? "sanctions") as string,
+      jurisdiction: r.jurisdiction ?? undefined,
+    });
+  }
+  return map;
 }
 
 /** Record a human-in-the-loop decision (audit trail). */

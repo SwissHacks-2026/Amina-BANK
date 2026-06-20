@@ -19,6 +19,17 @@ CREATE TABLE IF NOT EXISTS kyc_baselines (
   updated_at TIMESTAMPTZ DEFAULT now()
 );
 
+-- Sanctions / PEP watchlist hits (Kiara's screener output). The hard gate consults this.
+CREATE TABLE IF NOT EXISTS sanctions_hits (
+  norm_name      TEXT PRIMARY KEY,           -- normalized screened name (lookup key)
+  query          TEXT NOT NULL,              -- original screened name
+  matched_entity TEXT,
+  score          REAL,
+  source         TEXT,
+  jurisdiction   TEXT,
+  fetched_at     TIMESTAMPTZ DEFAULT now()
+);
+
 CREATE TABLE IF NOT EXISTS decisions (
   id         SERIAL PRIMARY KEY,
   client_id  TEXT,

@@ -13,7 +13,10 @@ async function main(): Promise<void> {
     process.exit(1);
   }
   const r = await ingestToDb();
-  console.log(`Ingested ${r.baselines} baselines and ${r.signals} signals into Postgres.`);
+  console.log(
+    `Ingested into Postgres: ${r.baselines} baselines, ${r.signals} news signals, ` +
+      `${r.registrySignals} registry signals, ${r.sanctions} sanctions watchlist hits.`,
+  );
   await pool.end();
 }
 

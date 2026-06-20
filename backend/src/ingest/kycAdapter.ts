@@ -8,6 +8,9 @@ interface ExternalKyc {
   company_id: string;
   legal_name: string;
   domain?: string;
+  jurisdiction?: string;
+  legal_form?: string;
+  ownership?: string;
   kyc_baseline?: {
     expected_business_model?: string;
     expected_activity_and_volumes?: string;
@@ -39,8 +42,8 @@ export function loadBaselines(path: URL | string = DEFAULT_PATH): ClientBaseline
   return raw.map((k) => ({
     clientId: k.company_id,
     legalName: k.legal_name,
-    jurisdiction: "unknown",
-    legalForm: "unknown",
+    jurisdiction: k.jurisdiction ?? "unknown",
+    legalForm: k.legal_form ?? "unknown",
     onboardingDate: "2024-01-01",
     declaredBusinessDescription: [
       k.kyc_baseline?.expected_business_model,

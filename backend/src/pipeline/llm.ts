@@ -40,6 +40,7 @@ export type LLMMode = "ollama" | "anthropic" | "apertus" | "stub";
 export function llmMode(): LLMMode {
   if (OLLAMA_MODEL) return "ollama";
   if (process.env.ANTHROPIC_API_KEY) return "anthropic";
+  if (process.env.APERTUS_API_KEY) return "apertus"; // Swiss sovereign LLM as default reasoning
   return "stub";
 }
 
@@ -177,7 +178,14 @@ export function extractJSON<T>(text: string): T {
   const start = candidate.indexOf("{");
   const end = candidate.lastIndexOf("}");
   if (start === -1 || end === -1) throw new Error(`No JSON object in model output: ${text.slice(0, 200)}`);
-  return JSON.parse(candidate.slice(start, end + 1)) as T;
+  const raw = candidate.slice(start, end + 1);
+  try {
+    return JSON.parse(raw) as T;
+  } catch {
+    // Some models (e.g. Apertus 70B) emit trailing commas before } or ] — strip and retry.
+    const repaired = raw.replace(/,(\s*[}\]])/g, "$1");
+    return JSON.parse(repaired) as T;
+  }
 }
 
 export function costSummary() {
