@@ -38,7 +38,25 @@ export async function classifySignal(
     stub: () => stubClassify(signal, embeddingScores, retrievedEvidence),
   });
 
-  const parsed = extractJSON<Stage2JSON>(text);
+  let parsed: Stage2JSON;
+  try {
+    parsed = extractJSON<Stage2JSON>(text);
+  } catch {
+    // Some open models (e.g. Apertus 70B) sometimes answer in prose with no JSON object.
+    // Degrade gracefully instead of failing the case: keep the model's text as the rationale
+    // and derive direction/magnitude from the (free) embedding gate.
+    const top = embeddingScores.archetypeMatches?.[0];
+    const baselineSim = embeddingScores.baselineSimilarity ?? 1;
+    const archSim = top?.similarity ?? 0;
+    const riskish = baselineSim < 0.6 || archSim > 0.55;
+    parsed = {
+      direction: riskish ? "risk_increasing" : "neutral_update",
+      magnitude: riskish ? Math.round(Math.min(100, 40 + archSim * 60)) : 25,
+      rationale: text.trim().slice(0, 600) || "Model returned no structured output.",
+      source_citations: retrievedEvidence.map((e) => e.sourceUrl),
+      confidence: 0.5,
+    };
+  }
   return {
     signalId: signal.signalId,
     category: signal.category,

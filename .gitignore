@@ -31,3 +31,6 @@ __pycache__/
 # Vite build cache (regenerated; never commit)
 frontend/.vite/
 **/.vite/
+
+# Python venv for the pitch-deck generator (never commit)
+**/.pptxvenv/

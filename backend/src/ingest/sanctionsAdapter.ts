@@ -48,3 +48,44 @@ export function loadSanctionsHits(path: URL | string = DEFAULT_PATH): Map<string
   }
   return map;
 }
+
+// Kiara's real screener output (scrapers/sanctions/kyc_sanctions_flags.json).
+//   { names_screened, flagged_count, flags: [ { name, kind,
+//       matches: [{ matched_name, score, source?, programs?, jurisdiction? }] } ] }
+const KIARA_PATH = new URL("../../../scrapers/sanctions/kyc_sanctions_flags.json", import.meta.url);
+
+interface KiaraMatch {
+  matched_name?: string;
+  score?: number;
+  source?: string;
+  programs?: string[];
+  jurisdiction?: string;
+}
+interface KiaraFlag {
+  name: string;
+  kind?: string;
+  matches?: KiaraMatch[];
+}
+
+/** Load Kiara's flagged entities keyed by normalized screened name. Empty if not generated. */
+export function loadKiaraFlags(path: URL | string = KIARA_PATH): Map<string, SanctionsHit> {
+  const map = new Map<string, SanctionsHit>();
+  if (!existsSync(path)) return map;
+  const doc = JSON.parse(readFileSync(path, "utf8")) as { flags?: KiaraFlag[] };
+  for (const f of doc.flags ?? []) {
+    const best = (f.matches ?? []).reduce<KiaraMatch | undefined>(
+      (a, b) => ((b.score ?? 0) > (a?.score ?? 0) ? b : a),
+      undefined,
+    );
+    if (!best) continue;
+    map.set(normName(f.name), {
+      query: f.name,
+      matchedEntity: best.matched_name ?? f.name,
+      score: best.score ?? 100,
+      source: best.source ?? "OFAC/OpenSanctions",
+      programs: best.programs,
+      jurisdiction: best.jurisdiction,
+    });
+  }
+  return map;
+}

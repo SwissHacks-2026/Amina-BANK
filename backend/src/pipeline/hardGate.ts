@@ -6,7 +6,7 @@
 // (OpenSanctions / OFAC). The exact-match contract stays the same either way.
 
 import type { ClientBaseline } from "../types.js";
-import { loadSanctionsHits, normName } from "../ingest/sanctionsAdapter.js";
+import { loadKiaraFlags, loadSanctionsHits, normName, type SanctionsHit } from "../ingest/sanctionsAdapter.js";
 import { POLICY } from "./policy.js";
 
 export interface SanctionsReviewCandidate {
@@ -24,13 +24,36 @@ export interface HardGateResult {
   reviewCandidates?: SanctionsReviewCandidate[];
 }
 
-// Real OFAC/UN hits produced by Kiara's bridge (scrapers/sanctions/screen_portfolio.py).
-// Empty until that file exists; then it takes priority over the demo stub.
-const REAL_HITS = loadSanctionsHits();
+// Real OFAC/UN watchlist. Priority: Postgres (sanctions_hits, fed by db:ingest) → Kiara's
+// JSON file → legacy data/sanctions_hits.json. Loaded once and cached. The DB path is the
+// "scrapers → Postgres → pipeline" loop; the file paths are the keyless fallback.
+let cachedHits: Map<string, SanctionsHit> | null = null;
+
+async function getSanctionsHits(): Promise<Map<string, SanctionsHit>> {
+  if (cachedHits) return cachedHits;
+  if (process.env.DATABASE_URL) {
+    try {
+      const { loadAllSanctionsHits, pingDb } = await import("../db.js");
+      if (await pingDb()) {
+        const fromDb = await loadAllSanctionsHits();
+        if (fromDb.size) {
+          cachedHits = fromDb;
+          return cachedHits;
+        }
+      }
+    } catch {
+      // fall through to file-based loading
+    }
+  }
+  cachedHits = new Map([...loadSanctionsHits(), ...loadKiaraFlags()]);
+  return cachedHits;
+}
 
 // Demo stub list (for the bundled demo cases not present on real lists).
+// Normalised with the SAME normName() as the real-hits path so case, whitespace and
+// punctuation variants ("Acme Ltd." vs "Acme Ltd") match consistently.
 const DEMO_SANCTIONS = new Set(
-  ["blocked holdings ltd", "ivan petrov", "north star trading fze"].map((s) => s.toLowerCase().trim()),
+  ["blocked holdings ltd", "ivan petrov", "north star trading fze"].map((s) => normName(s)),
 );
 
 interface Query {
@@ -43,8 +66,8 @@ interface Query {
 }
 
 async function querySanctions(name: string): Promise<Query> {
-  // 1) real sanctions data (Kiara) first
-  const real = REAL_HITS.get(normName(name));
+  // 1) real sanctions data (DB / Kiara) first
+  const real = (await getSanctionsHits()).get(normName(name));
   if (real) {
     return {
       hit: true,
@@ -56,7 +79,7 @@ async function querySanctions(name: string): Promise<Query> {
     };
   }
   // 2) demo fallback — treated as an exact (score 100) confirmed hit
-  const hit = DEMO_SANCTIONS.has(name.toLowerCase().trim());
+  const hit = DEMO_SANCTIONS.has(normName(name));
   return {
     hit,
     entity: hit ? name : undefined,

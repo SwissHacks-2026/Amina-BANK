@@ -103,7 +103,19 @@ Return ONLY:
       }),
   });
 
-  const judged = extractJSON<JudgeJSON>(judgeText);
+  let judged: JudgeJSON;
+  try {
+    judged = extractJSON<JudgeJSON>(judgeText);
+  } catch {
+    // Open models (e.g. Apertus 70B) sometimes return prose with no JSON. Fall back to a
+    // score-driven verdict and keep the judge's text as reasoning rather than failing the case.
+    judged = {
+      verdict: composite.compositeScore >= 60 ? "risk_confirmed" : "uncertain",
+      confidence: 0.6,
+      judge_reasoning: judgeText.trim().slice(0, 600) || "Judge returned no structured output.",
+      recommended_action: "escalate to senior compliance for manual review",
+    };
+  }
   return {
     verdict: judged.verdict,
     confidence: Math.max(0, Math.min(1, judged.confidence)),

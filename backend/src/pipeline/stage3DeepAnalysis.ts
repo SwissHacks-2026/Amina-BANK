@@ -33,7 +33,20 @@ export async function deepAnalyze(
     stub: () => stubDeep(baseline, compositeResult, allEvidence),
   });
 
-  const parsed = extractJSON<Stage3JSON>(text);
+  let parsed: Stage3JSON;
+  try {
+    parsed = extractJSON<Stage3JSON>(text);
+  } catch {
+    // Open models (e.g. Apertus 70B) sometimes return prose with no JSON. Keep their text as
+    // the analyst-facing summary rather than failing the whole case.
+    const prose = text.trim();
+    parsed = {
+      summary: prose.slice(0, 800) || "Model returned no structured output.",
+      full_reasoning_chain: prose,
+      all_sources_used: allEvidence.map((e) => e.sourceUrl),
+      recommended_action: "escalate to senior compliance for manual review",
+    };
+  }
   return {
     clientId: baseline.clientId,
     summary: parsed.summary,

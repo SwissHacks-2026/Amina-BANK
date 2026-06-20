@@ -8,6 +8,9 @@ interface ExternalKyc {
   company_id: string;
   legal_name: string;
   domain?: string;
+  jurisdiction?: string;
+  legal_form?: string;
+  ownership?: string;
   kyc_baseline?: {
     expected_business_model?: string;
     expected_activity_and_volumes?: string;
@@ -32,15 +35,16 @@ function normRisk(r?: string): "low" | "medium" | "high" {
   return "medium";
 }
 
-const DEFAULT_PATH = new URL("../../../data/kyc_database.json", import.meta.url);
+// Team KYC database lives in docs/ (real, anchored to public footprints).
+const DEFAULT_PATH = new URL("../../../docs/kyc_database.json", import.meta.url);
 
 export function loadBaselines(path: URL | string = DEFAULT_PATH): ClientBaseline[] {
   const raw = JSON.parse(readFileSync(path, "utf8")) as ExternalKyc[];
   return raw.map((k) => ({
     clientId: k.company_id,
     legalName: k.legal_name,
-    jurisdiction: "unknown",
-    legalForm: "unknown",
+    jurisdiction: k.jurisdiction ?? "unknown",
+    legalForm: k.legal_form ?? "unknown",
     onboardingDate: "2024-01-01",
     declaredBusinessDescription: [
       k.kyc_baseline?.expected_business_model,

@@ -74,12 +74,15 @@ app.get("/api/portfolio/alerts", async (_req, res) => {
       signalsByClient = loadDriftSignals();
       source = "json-files";
     }
-    const alerts = [];
-    for (const baseline of baselines) {
-      const signals = signalsByClient[baseline.clientId] ?? [];
-      const result = await runPipeline(baseline, [], signals);
-      alerts.push({ caseName: baseline.legalName, baseline, ...result });
-    }
+    // Score all clients concurrently — each runPipeline is independent, so this turns the
+    // wall-clock from sum-of-clients into slowest-single-client (matters with a live LLM).
+    const alerts = await Promise.all(
+      baselines.map(async (baseline) => {
+        const signals = signalsByClient[baseline.clientId] ?? [];
+        const result = await runPipeline(baseline, [], signals);
+        return { caseName: baseline.legalName, baseline, ...result };
+      }),
+    );
     res.json({ alerts, cost: costSummary(), source });
   } catch (e) {
     res.status(500).json({ error: (e as Error).message });
