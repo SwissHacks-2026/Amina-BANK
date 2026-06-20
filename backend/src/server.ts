@@ -7,6 +7,7 @@ import { costSummary, isLiveLLM } from "./pipeline/llm.js";
 import { demoCases } from "./data/sampleData.js";
 import { loadBaselines } from "./ingest/kycAdapter.js";
 import { loadDriftSignals } from "./ingest/newsAdapter.js";
+import { loadAllBaselines, loadAllSignals, pingDb } from "./db.js";
 import type { ClientBaseline, RawSignal, TransactionRecord } from "./types.js";
 
 const app = express();
@@ -59,15 +60,26 @@ app.get("/api/demo/alerts", async (_req, res) => {
 // each scored through the pipeline. This is the integrated end-to-end view.
 app.get("/api/portfolio/alerts", async (_req, res) => {
   try {
-    const baselines = loadBaselines();
-    const signalsByClient = loadDriftSignals();
+    // Prefer Postgres (the scrapers→DB→API loop); fall back to reading the JSON files directly.
+    let baselines;
+    let signalsByClient;
+    let source: string;
+    if (process.env.DATABASE_URL && (await pingDb())) {
+      baselines = await loadAllBaselines();
+      signalsByClient = await loadAllSignals();
+      source = "postgres";
+    } else {
+      baselines = loadBaselines();
+      signalsByClient = loadDriftSignals();
+      source = "json-files";
+    }
     const alerts = [];
     for (const baseline of baselines) {
       const signals = signalsByClient[baseline.clientId] ?? [];
       const result = await runPipeline(baseline, [], signals);
       alerts.push({ caseName: baseline.legalName, baseline, ...result });
     }
-    res.json({ alerts, cost: costSummary(), source: "team-data" });
+    res.json({ alerts, cost: costSummary(), source });
   } catch (e) {
     res.status(500).json({ error: (e as Error).message });
   }

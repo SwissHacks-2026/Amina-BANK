@@ -48,6 +48,33 @@ export async function loadSignals(clientId: string): Promise<RawSignal[]> {
   }));
 }
 
+/** Load all KYC baselines from the DB (JSONB column → ClientBaseline). */
+export async function loadAllBaselines(): Promise<ClientBaseline[]> {
+  const { rows } = await pool.query("SELECT data FROM kyc_baselines ORDER BY client_id");
+  return rows.map((r) => r.data as ClientBaseline);
+}
+
+/** Load all signals from the DB, grouped by clientId. */
+export async function loadAllSignals(): Promise<Record<string, RawSignal[]>> {
+  const { rows } = await pool.query(
+    `SELECT id, client_id, category, source_type, source_url, raw_text, detected_at
+       FROM signals ORDER BY detected_at DESC`,
+  );
+  const out: Record<string, RawSignal[]> = {};
+  for (const r of rows) {
+    (out[r.client_id] ??= []).push({
+      signalId: String(r.id),
+      clientId: r.client_id as string,
+      category: r.category as SignalCategory,
+      detectedAt: new Date(r.detected_at).toISOString(),
+      sourceType: r.source_type as RawSignal["sourceType"],
+      sourceUrl: r.source_url ?? undefined,
+      rawText: r.raw_text ?? undefined,
+    });
+  }
+  return out;
+}
+
 /** Upsert a synthetic KYC baseline. */
 export async function saveBaseline(baseline: ClientBaseline): Promise<void> {
   await pool.query(
