@@ -3,6 +3,7 @@ import type { Alert, AuditEntry } from "./types";
 import { fetchAlerts, fetchAudit, postDecision, type DataSource } from "./api";
 import { Bar, DirectionTag, driftArrow, humanize, RiskPill, ScoreMeter, SyntheticChip } from "./ui";
 import { ClustersView } from "./clusters/ClustersView";
+import aminaLogo from "../assets/AminaBank_logo.png";
 
 const RANK: Record<string, number> = { critical: 0, high: 1, medium: 2, low: 3 };
 
@@ -82,12 +83,15 @@ export function App() {
   return (
     <div className="app">
       <header className="topbar">
+        <div className="topbar-left">
+          <span className="advisory">ADVISORY ONLY — a human approves every decision</span>
+        </div>
         <div className="brand">
-          <span className="brand-mark">◆</span> AMINA · Risk Horizon
+          <h1 className="brand-name">Risk Horizon</h1>
           <span className="brand-sub">Dynamic KYC-Drift Monitoring</span>
         </div>
         <div className="topbar-right">
-          <span className="advisory">ADVISORY ONLY — a human approves every decision</span>
+          <img className="brand-logo" src={aminaLogo} alt="AMINA" />
         </div>
       </header>
 

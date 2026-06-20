@@ -19,8 +19,10 @@ import {
   type HubNode,
   type LeafNode,
   type RawCompany,
+  type SanctionFlag,
+  type RegistryDriftEntry,
 } from "./graph";
-import { fetchDriftSignals } from "../api";
+import { fetchDriftSignals, fetchSanctionsFlags, fetchRegistryDrift } from "../api";
 
 // ---- virtual canvas (SVG scales to fill its container via viewBox) ----
 const VW = 1120;
@@ -36,6 +38,10 @@ const subHubFill = (h: number) => `hsl(${h} 46% 60%)`; // a leaf that anchors it
 const leafFill = (h: number) => `hsl(${h} 40% 80%)`;
 const clusterEdge = (h: number) => `hsl(${h} 38% 55%)`;
 const INK_EDGE = "rgba(36,31,24,0.15)";
+// Sanctions contagion: confirmed match → red, review-tier (likely homonym) → amber.
+const DANGER: Record<"confirmed" | "review", string> = { confirmed: "#c0392b", review: "#d98324" };
+// Registry "DRIFT DETECTED" → the whole company cluster turns red.
+const DRIFT_RED = "#c0392b";
 
 const lerp = (a: number, b: number, t: number) => a + (b - a) * Math.max(0, Math.min(1, t));
 
@@ -47,15 +53,22 @@ type Selection =
 
 export function ClustersView() {
   const [companies, setCompanies] = useState<RawCompany[] | null>(null);
+  const [flags, setFlags] = useState<SanctionFlag[]>([]);
+  const [registry, setRegistry] = useState<RegistryDriftEntry[]>([]);
 
   useEffect(() => {
     fetchDriftSignals().then(setCompanies);
+    fetchSanctionsFlags().then(setFlags);
+    fetchRegistryDrift().then(setRegistry);
   }, []);
 
-  const graph = useMemo(() => (companies ? buildGraph(companies) : null), [companies]);
+  const graph = useMemo(
+    () => (companies ? buildGraph(companies, flags, registry) : null),
+    [companies, flags, registry],
+  );
 
   if (!graph) return <div className="cl-loading">Building clusters…</div>;
-  return <ClustersInner key={companies?.length} graph={graph} />;
+  return <ClustersInner key={`${companies?.length}-${flags.length}-${registry.length}`} graph={graph} />;
 }
 
 function ClustersInner({ graph }: { graph: NonNullable<ReturnType<typeof buildGraph>> }) {
@@ -484,12 +497,18 @@ function ClustersInner({ graph }: { graph: NonNullable<ReturnType<typeof buildGr
                   (matchCompany && !matchCompany.has(e.companyId));
                 const hot = focusCompany && e.companyId === focusCompany;
                 const hue = hubById.get(e.companyId)?.hue;
+                // a link into a sanctioned entity is drawn as a danger edge (contagion)
+                const sanc =
+                  (t.kind === "leaf" ? (t as LeafNode).sanction : undefined) ??
+                  (s.kind === "leaf" ? (s as LeafNode).sanction : undefined);
+                // a link in a registry-drift cluster is red (the whole cluster turns red)
+                const driftCluster = hubById.get(e.companyId)?.registryDrift;
                 return (
                   <line
                     key={`${e.source}-${e.target}`}
                     x1={s.x} y1={s.y} x2={t.x} y2={t.y}
-                    stroke={hot && hue != null ? clusterEdge(hue) : INK_EDGE}
-                    strokeWidth={hot ? 1.6 : 1}
+                    stroke={sanc ? DANGER[sanc.tier] : driftCluster ? DRIFT_RED : hot && hue != null ? clusterEdge(hue) : INK_EDGE}
+                    strokeWidth={sanc ? 2 : driftCluster ? 1.6 : hot ? 1.6 : 1}
                     opacity={dimmed ? 0.18 : 1}
                   />
                 );
@@ -512,11 +531,12 @@ function ClustersInner({ graph }: { graph: NonNullable<ReturnType<typeof buildGr
                     if (sl && !leafPassesDim(sl)) return null;
                     if (tl && !leafPassesDim(tl)) return null;
                     const hue = hubById.get(rel.companyId)?.hue ?? 0;
+                    const driftCluster = hubById.get(rel.companyId)?.registryDrift;
                     return (
                       <line
                         key={`rel-${rel.source}-${rel.target}`}
                         x1={s.x} y1={s.y} x2={t.x} y2={t.y}
-                        stroke={clusterEdge(hue)}
+                        stroke={driftCluster ? DRIFT_RED : clusterEdge(hue)}
                         strokeWidth={1.4}
                         strokeDasharray="4 4"
                         opacity={0.7}
@@ -533,6 +553,7 @@ function ClustersInner({ graph }: { graph: NonNullable<ReturnType<typeof buildGr
                 if (focused && c.companyId !== focused) return null;
                 const dimmed = dimNode(n);
                 const isSel = selectedId === c.id;
+                const catDrift = hubById.get(c.companyId)?.registryDrift;
                 return (
                   <g key={c.id}
                     style={{ transform: `translate(${c.x}px,${c.y}px)` }}
@@ -542,7 +563,7 @@ function ClustersInner({ graph }: { graph: NonNullable<ReturnType<typeof buildGr
                     onMouseLeave={() => setHoverCompany(null)}
                     onClick={(ev) => { ev.stopPropagation(); setSelection({ kind: "category", node: c }); focusCluster(c.companyId); }}>
                     <circle r={c.r} fill={categoryFill(c.hue)}
-                      stroke={isSel ? hubFill(c.hue) : clusterEdge(c.hue)} strokeWidth={isSel ? 2.5 : 1.5} />
+                      stroke={isSel ? hubFill(c.hue) : catDrift ? DRIFT_RED : clusterEdge(c.hue)} strokeWidth={isSel ? 2.5 : catDrift ? 2 : 1.5} />
                     <g transform={`translate(${(c.r ?? 16) * 0.72},${-(c.r ?? 16) * 0.72})`}>
                       <circle r={8} fill={hubFill(c.hue)} />
                       <text className="cl-badge" textAnchor="middle" dy="3.2">{c.count}</text>
@@ -562,23 +583,33 @@ function ClustersInner({ graph }: { graph: NonNullable<ReturnType<typeof buildGr
                 const dimmed = dimNode(n);
                 const isSel = selectedId === l.id;
                 const isSubHub = subHubIds.has(l.id);
+                const sanc = l.sanction;
+                const leafDrift = hubById.get(l.companyId)?.registryDrift;
                 return (
                   <g key={l.id}
                     style={{ transform: `translate(${l.x}px,${l.y}px)` }}
-                    className="cl-node"
+                    className={`cl-node${sanc ? ` cl-sanc cl-sanc-${sanc.tier}` : ""}`}
                     opacity={dimmed ? 0.12 : 1}
                     onMouseEnter={() => { setHoverCompany(l.companyId); setHoverNodeId(l.id); }}
                     onMouseLeave={() => { setHoverCompany(null); setHoverNodeId(null); }}
                     onClick={(ev) => { ev.stopPropagation(); setSelection({ kind: "leaf", node: l }); focusCluster(l.companyId); }}>
-                    <circle r={l.r} fill={isSubHub ? subHubFill(l.hue) : leafFill(l.hue)}
-                      stroke={isSel ? hubFill(l.hue) : "none"} strokeWidth={isSel ? 2.5 : 0} />
+                    <circle r={l.r}
+                      fill={sanc ? DANGER[sanc.tier] : isSubHub ? subHubFill(l.hue) : leafFill(l.hue)}
+                      stroke={sanc ? DANGER[sanc.tier] : isSel ? hubFill(l.hue) : leafDrift ? DRIFT_RED : "none"}
+                      strokeWidth={isSel ? 2.5 : sanc ? 1.5 : leafDrift ? 1.3 : 0} />
                     {l.count > 1 && (
                       <g transform={`translate(${(l.r ?? 8) * 0.72},${-(l.r ?? 8) * 0.72})`}>
-                        <circle r={8} fill={hubFill(l.hue)} />
+                        <circle r={8} fill={sanc ? DANGER[sanc.tier] : hubFill(l.hue)} />
                         <text className="cl-badge" textAnchor="middle" dy="3.2">{l.count}</text>
                       </g>
                     )}
-                    {(focused != null || hoverNodeId === l.id || isSel) && (
+                    {sanc && (
+                      <g transform={`translate(${-(l.r ?? 8) * 0.72},${-(l.r ?? 8) * 0.72})`}>
+                        <circle r={7.5} fill="#fff" stroke={DANGER[sanc.tier]} strokeWidth={1.3} />
+                        <text className="cl-sanc-badge" textAnchor="middle" dy="3.3">⚠</text>
+                      </g>
+                    )}
+                    {(focused != null || hoverNodeId === l.id || isSel || sanc) && (
                       <text className="cl-leaf-label" textAnchor="middle" dy={(l.r ?? 8) + 13}>
                         {l.name.length > 24 ? l.name.slice(0, 22) + "…" : l.name}
                       </text>
@@ -595,17 +626,21 @@ function ClustersInner({ graph }: { graph: NonNullable<ReturnType<typeof buildGr
                 if (focused && h.companyId !== focused) return null;
                 const dimmed = dimNode(n);
                 const isSel = selectedId === h.id;
+                const drift = h.registryDrift;
                 return (
                   <g key={h.id}
                     style={{ transform: `translate(${h.x}px,${h.y}px)` }}
-                    className="cl-node"
+                    className={`cl-node${drift ? " cl-drift-hub" : ""}`}
                     opacity={dimmed ? 0.18 : 1}
                     onMouseEnter={() => setHoverCompany(h.companyId)}
                     onMouseLeave={() => setHoverCompany(null)}
                     onClick={(ev) => { ev.stopPropagation(); setSelection({ kind: "hub", node: h }); focusCluster(h.companyId); }}>
-                    <circle r={h.r} fill={hubFill(h.hue)}
-                      stroke={isSel ? "#241F18" : "none"} strokeWidth={isSel ? 2.5 : 0} />
-                    <text className="cl-hub-label" textAnchor="middle" dy={(h.r ?? 20) + 15}>
+                    <circle r={h.r} fill={drift ? DRIFT_RED : hubFill(h.hue)}
+                      stroke={isSel ? "#241F18" : drift ? "#7a2015" : "none"} strokeWidth={isSel ? 2.5 : drift ? 2 : 0} />
+                    {drift && (
+                      <text className="cl-hub-drift-tag" textAnchor="middle" dy={-(h.r ?? 20) - 8}>⚠ DRIFT</text>
+                    )}
+                    <text className={`cl-hub-label${drift ? " cl-hub-label-drift" : ""}`} textAnchor="middle" dy={(h.r ?? 20) + 15}>
                       {h.name.length > 26 ? h.name.slice(0, 24) + "…" : h.name}
                     </text>
                   </g>
@@ -716,6 +751,7 @@ function DetailPanel({
 }) {
   if (!selection) {
     const totalArticles = graph.hubs.reduce((s, h) => s + h.articles.length, 0);
+    const sanctioned = graph.leaves.filter((l) => l.sanction);
     return (
       <aside className="cl-panel">
         <div className="cl-panel-eyebrow">Clusters view</div>
@@ -724,6 +760,29 @@ function DetailPanel({
           One hub per company. Named entities group into role-type bubbles — Investors,
           Regulators, Partners — that open to the detailed names. Click any node to drill in.
         </p>
+        {sanctioned.length > 0 && (
+          <div className="cl-sanc-legend">
+            <div className="cl-sanc-legend-head">
+              ⚠ {sanctioned.length} sanctioned counterpart{sanctioned.length === 1 ? "y" : "ies"} detected
+            </div>
+            <div className="cl-sanc-legend-row">
+              <span className="cl-sanc-swatch" style={{ background: DANGER.confirmed }} /> Confirmed match
+              <span className="cl-sanc-swatch" style={{ background: DANGER.review, marginLeft: 12 }} /> Possible — review
+            </div>
+            <div className="cl-sanc-legend-list">
+              {sanctioned.map((l) => (
+                <button key={l.id} className="cl-legend-row"
+                  onMouseEnter={() => onHoverCompany(l.companyId)}
+                  onMouseLeave={() => onHoverCompany(null)}
+                  onClick={() => onSelectLeafById(l.id)}>
+                  <span className="cl-legend-dot" style={{ background: DANGER[l.sanction!.tier] }} />
+                  <span className="cl-legend-name">{l.name}</span>
+                  <span className="cl-legend-count">{l.sanction!.score}%</span>
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
         <div className="cl-overview-stats">
           <Stat label="Companies" value={graph.hubs.length} />
           <Stat label="Groups" value={graph.categories.length} />
@@ -737,8 +796,11 @@ function DetailPanel({
               onMouseEnter={() => onHoverCompany(h.companyId)}
               onMouseLeave={() => onHoverCompany(null)}
               onClick={() => onSelectHub(h)}>
-              <span className="cl-legend-dot" style={{ background: hubFill(h.hue) }} />
-              <span className="cl-legend-name">{h.name}</span>
+              <span className="cl-legend-dot" style={{ background: h.registryDrift ? DRIFT_RED : hubFill(h.hue) }} />
+              <span className="cl-legend-name">
+                {h.name}
+                {h.registryDrift && <span className="cl-legend-drift"> ⚠ drift</span>}
+              </span>
               <span className="cl-legend-count">{h.keptCount}</span>
             </button>
           ))}
@@ -829,6 +891,14 @@ function HubPanel({ hub }: { hub: HubNode }) {
         {hub.keptCount} kept<span className="cl-sep">|</span>
         {hub.articlesScreened} screened
       </div>
+      {hub.registryDrift && (
+        <div className="cl-sanction cl-sanction-confirmed">
+          <div className="cl-sanction-head">⚠ Registry drift detected</div>
+          <ul className="cl-drift-list">
+            {hub.registryDrift.alerts.map((a, i) => <li key={i}>{a}</li>)}
+          </ul>
+        </div>
+      )}
       {groups.map(([dim, arts]) => (
         <section key={dim} className="cl-group">
           <div className="cl-group-head">
@@ -858,6 +928,22 @@ function LeafPanel({
       <h2 className="cl-panel-title">
         {leaf.name} <span className="cl-count-tag">({leaf.count} article{leaf.count === 1 ? "" : "s"})</span>
       </h2>
+      {leaf.sanction && (
+        <div className={`cl-sanction cl-sanction-${leaf.sanction.tier}`}>
+          <div className="cl-sanction-head">
+            {leaf.sanction.tier === "confirmed"
+              ? "⚠ Sanctioned counterparty"
+              : "⚠ Possible sanctions match — human review"}
+          </div>
+          <div className="cl-sanction-body">
+            Matches <strong>{leaf.sanction.matchedName}</strong> on {leaf.sanction.source}
+            {leaf.sanction.listName ? ` ${leaf.sanction.listName}` : ""} ({leaf.sanction.score}% name match).
+            {leaf.sanction.programs.length > 0 && (
+              <> Programs: {leaf.sanction.programs.join(", ")}.</>
+            )}
+          </div>
+        </div>
+      )}
       {otherAliases.length > 0 && (
         <div className="cl-aliases">also: {otherAliases.join(" · ")}</div>
       )}

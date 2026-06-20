@@ -1,7 +1,9 @@
 import type { Alert, AuditEntry, Cost } from "./types";
 import { SEED_ALERTS, SEED_COST } from "./seed";
-import type { RawCompany } from "./clusters/graph";
+import type { RawCompany, SanctionFlag, RegistryDriftEntry } from "./clusters/graph";
 import bundledDriftSignals from "./data/kyc_drift_signals.json";
+import bundledSanctionsFlags from "./data/kyc_sanctions_flags.json";
+import bundledRegistryDrift from "./data/kyc_drift_report.json";
 
 // Calls the backend via the Vite proxy (/api → :8787). If the backend is
 // unreachable, transparently falls back to bundled seed data so the demo
@@ -61,6 +63,34 @@ export async function fetchDriftSignals(): Promise<RawCompany[]> {
     return data.companies;
   } catch {
     return bundledDriftSignals as RawCompany[];
+  }
+}
+
+// Sanctions screening flags for the Clusters contagion overlay. Tries the backend, falls
+// back to the JSON bundled at build time so the overlay renders even offline.
+export async function fetchSanctionsFlags(): Promise<SanctionFlag[]> {
+  try {
+    const res = await fetch("/api/sanctions-flags");
+    if (!res.ok) throw new Error(String(res.status));
+    const data = (await res.json()) as { flags: SanctionFlag[] };
+    if (!Array.isArray(data.flags) || data.flags.length === 0) throw new Error("empty");
+    return data.flags;
+  } catch {
+    return (bundledSanctionsFlags as { flags: SanctionFlag[] }).flags ?? [];
+  }
+}
+
+// Corporate registry drift report for the Clusters view (drift-detected → red cluster).
+// Tries the backend, falls back to the bundled JSON so the overlay renders offline.
+export async function fetchRegistryDrift(): Promise<RegistryDriftEntry[]> {
+  try {
+    const res = await fetch("/api/registry-drift");
+    if (!res.ok) throw new Error(String(res.status));
+    const data = (await res.json()) as { report: RegistryDriftEntry[] };
+    if (!Array.isArray(data.report) || data.report.length === 0) throw new Error("empty");
+    return data.report;
+  } catch {
+    return bundledRegistryDrift as RegistryDriftEntry[];
   }
 }
 

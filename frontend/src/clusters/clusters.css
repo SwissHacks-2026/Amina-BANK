@@ -14,7 +14,7 @@
   font-family: "Geist Variable", "Geist", ui-sans-serif, system-ui, -apple-system, sans-serif;
   background: var(--cl-canvas);
   color: var(--cl-ink);
-  height: calc(100vh - 96px);
+  height: calc(100vh - var(--header-h, 96px));
   display: flex;
   flex-direction: column;
   animation: cl-slide-in 0.34s ease;
@@ -30,7 +30,7 @@
   color: #857b68;
   background: #f3eee3;
   font-family: "Geist", ui-sans-serif, system-ui, sans-serif;
-  min-height: calc(100vh - 96px);
+  min-height: calc(100vh - var(--header-h, 96px));
 }
 
 /* ---- control bar ---- */
@@ -355,3 +355,46 @@
 @media (max-width: 1000px) {
   .cl-panel { flex-basis: 320px; max-width: 320px; }
 }
+
+/* ── Sanctions contagion overlay ───────────────────────────────────── */
+/* node warning badge ⚠ */
+.cl-sanc-badge { font-size: 9px; font-weight: 700; fill: #c0392b; }
+/* confirmed-match nodes pulse so the eye lands on them first */
+.cl-sanc-confirmed > circle:first-of-type { animation: cl-sanc-pulse 1.8s ease-in-out infinite; }
+@keyframes cl-sanc-pulse {
+  0%, 100% { filter: drop-shadow(0 0 0 rgba(192, 57, 43, 0)); }
+  50% { filter: drop-shadow(0 0 5px rgba(192, 57, 43, 0.85)); }
+}
+
+/* detail-panel sanction banner */
+.cl-sanction {
+  margin: 10px 0 4px; padding: 10px 12px; border-radius: 8px;
+  border: 1px solid; font-size: 12.5px; line-height: 1.5;
+}
+.cl-sanction-confirmed { background: rgba(192, 57, 43, 0.10); border-color: rgba(192, 57, 43, 0.5); }
+.cl-sanction-review { background: rgba(217, 131, 36, 0.10); border-color: rgba(217, 131, 36, 0.5); }
+.cl-sanction-head { font-weight: 700; margin-bottom: 4px; }
+.cl-sanction-confirmed .cl-sanction-head { color: #a5311f; }
+.cl-sanction-review .cl-sanction-head { color: #9c5e15; }
+.cl-sanction-body { color: var(--cl-ink-soft); }
+
+/* overview legend */
+.cl-sanc-legend {
+  margin: 6px 0 14px; padding: 10px 12px; border-radius: 8px;
+  background: rgba(192, 57, 43, 0.06); border: 1px solid rgba(192, 57, 43, 0.28);
+}
+.cl-sanc-legend-head { font-weight: 700; font-size: 12.5px; color: #a5311f; margin-bottom: 6px; }
+.cl-sanc-legend-row {
+  display: flex; align-items: center; gap: 5px;
+  font-size: 11.5px; color: var(--cl-ink-soft); margin-bottom: 6px;
+}
+.cl-sanc-swatch { display: inline-block; width: 10px; height: 10px; border-radius: 3px; }
+.cl-sanc-legend-list { display: flex; flex-direction: column; gap: 1px; }
+
+/* ── Registry drift (company-level): DRIFT DETECTED → red cluster ───── */
+.cl-hub-drift-tag { font-size: 9px; font-weight: 800; letter-spacing: 0.04em; fill: #c0392b; }
+.cl-hub-label-drift { fill: #a5311f !important; font-weight: 800; }
+.cl-drift-hub > circle:first-of-type { animation: cl-sanc-pulse 1.8s ease-in-out infinite; }
+.cl-drift-list { margin: 4px 0 0; padding-left: 18px; color: var(--cl-ink-soft); font-size: 12.5px; line-height: 1.55; }
+.cl-drift-list li { margin-bottom: 2px; }
+.cl-legend-drift { color: #c0392b; font-weight: 700; font-size: 10.5px; }
