@@ -33,6 +33,9 @@ export async function runPipeline(
   baseline: ClientBaseline,
   recentTxs: TransactionRecord[],
   incomingSignals: RawSignal[],
+  // Deterministic, pre-scored signals (e.g. sanctions-list contagion) that bypass the
+  // embedding gate / Stage-2 classifier — a list match is a fact, not an LLM judgement.
+  preScored: SignalScore[] = [],
 ): Promise<PipelineResult> {
   const stageTrace: string[] = [];
   const evidenceBySignal: Record<string, Evidence[]> = {};
@@ -146,8 +149,18 @@ export async function runPipeline(
     return !weak;
   });
 
+  // ── Merge deterministic pre-scored signals (sanctions contagion etc.) — never weak-filtered ──
+  for (const s of preScored) {
+    stageTrace.push(
+      `Deterministic signal (no LLM): ${s.category} (magnitude ${s.magnitude}, confidence ${s.confidence}).`,
+    );
+    const urls = s.sourceCitations.filter((u) => /^https?:\/\//.test(u));
+    if (urls.length) evidenceBySignal[s.signalId] = urls.map((u) => ({ sourceUrl: u, text: s.rationale }));
+  }
+  const allKept = [...kept, ...preScored];
+
   // ── Aggregate ──
-  const composite = computeCompositeScore(kept, hardGateResult);
+  const composite = computeCompositeScore(allKept, hardGateResult);
   composite.clientId = baseline.clientId;
   stageTrace.push(`Composite score ${composite.compositeScore}/100 → flag ${composite.riskFlag}.`);
 

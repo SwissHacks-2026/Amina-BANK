@@ -57,7 +57,9 @@ export type SignalCategory =
   | "website_content_change" // site says it does something different now
   | "rapid_geographic_expansion" // sudden expansion into many/high-risk jurisdictions
   | "unexplained_volume_surge" // activity jump unexplained by stated business
-  | "negative_sentiment"; // adverse-media sentiment subtype
+  | "negative_sentiment" // adverse-media sentiment subtype
+  | "sanctioned_counterparty" // a linked entity (counterparty/UBO/investor) is on a sanctions list
+  | "entity_status_change"; // registry status drift — dissolved / liquidated / struck off vs. baseline
 
 export interface RawSignal {
   signalId: string;

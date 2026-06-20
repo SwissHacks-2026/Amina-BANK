@@ -6,7 +6,9 @@
 // (OpenSanctions / OFAC). The exact-match contract stays the same either way.
 
 import type { ClientBaseline } from "../types.js";
-import { loadKiaraFlags, loadSanctionsHits, normName, type SanctionsHit } from "../ingest/sanctionsAdapter.js";
+import { loadSanctionsHits, normName } from "../ingest/sanctionsAdapter.js";
+import { loadDirectSanctionsHits } from "../ingest/sanctionsFlagsAdapter.js";
+import { loadBaselines } from "../ingest/kycAdapter.js";
 import { POLICY } from "./policy.js";
 
 export interface SanctionsReviewCandidate {
@@ -47,6 +49,18 @@ async function getSanctionsHits(): Promise<Map<string, SanctionsHit>> {
   }
   cachedHits = new Map([...loadSanctionsHits(), ...loadKiaraFlags()]);
   return cachedHits;
+}
+
+// Also pull DIRECT customer/UBO hits from Kiara's screening report (kyc_sanctions_flags.json).
+// Only names that ARE a customer or UBO drive the gate here; linked-entity contagion is handled
+// in the pipeline (it must not auto-CRITICAL the customer). Guarded so a missing baselines/flags
+// file never breaks module load — the demo stub still works.
+try {
+  for (const [key, hit] of loadDirectSanctionsHits(loadBaselines())) {
+    if (!REAL_HITS.has(key)) REAL_HITS.set(key, hit);
+  }
+} catch {
+  /* baselines or flags file absent → skip; demo stub remains in effect */
 }
 
 // Demo stub list (for the bundled demo cases not present on real lists).

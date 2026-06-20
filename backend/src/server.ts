@@ -8,6 +8,8 @@ import { costSummary, isLiveLLM } from "./pipeline/llm.js";
 import { demoCases } from "./data/sampleData.js";
 import { loadBaselines } from "./ingest/kycAdapter.js";
 import { loadDriftSignals } from "./ingest/newsAdapter.js";
+import { loadContagionFlags, contagionFlagToScore } from "./ingest/sanctionsFlagsAdapter.js";
+import { loadRegistryDriftScores } from "./ingest/corporateAdapter.js";
 import { loadAllBaselines, loadAllSignals, pingDb } from "./db.js";
 import type { ClientBaseline, RawSignal, TransactionRecord } from "./types.js";
 
@@ -38,6 +40,8 @@ a{color:#4a7dff}code{background:#1d212a;padding:2px 6px;border-radius:4px}</styl
 <li><a href="/api/health">/api/health</a> — status</li>
 <li><a href="/api/demo/alerts">/api/demo/alerts</a> — 3 demo cases</li>
 <li><a href="/api/portfolio/alerts">/api/portfolio/alerts</a> — team portfolio</li>
+<li><a href="/api/sanctions-flags">/api/sanctions-flags</a> — sanctions screening flags</li>
+<li><a href="/api/registry-drift">/api/registry-drift</a> — corporate registry drift</li>
 <li><a href="/api/cost">/api/cost</a> — cost readout</li>
 <li><a href="/api/audit">/api/audit</a> — audit log</li>
 </ul></body></html>`);
@@ -74,15 +78,21 @@ app.get("/api/portfolio/alerts", async (_req, res) => {
       signalsByClient = loadDriftSignals();
       source = "json-files";
     }
-    // Score all clients concurrently — each runPipeline is independent, so this turns the
-    // wall-clock from sum-of-clients into slowest-single-client (matters with a live LLM).
-    const alerts = await Promise.all(
-      baselines.map(async (baseline) => {
-        const signals = signalsByClient[baseline.clientId] ?? [];
-        const result = await runPipeline(baseline, [], signals);
-        return { caseName: baseline.legalName, baseline, ...result };
-      }),
-    );
+    // Deterministic pre-scored signals (authoritative facts, no LLM judgement):
+    //  - sanctions contagion: a linked entity in a customer's news is on a list (counterparty
+    //    exposure on THAT customer — does not auto-CRITICAL; that's the hard gate's job).
+    //  - registry drift: live registry status/jurisdiction/officer changes vs. the KYC baseline.
+    const contagionByClient = loadContagionFlags(baselines);
+    const registryByClient = loadRegistryDriftScores(baselines);
+
+    const alerts = [];
+    for (const baseline of baselines) {
+      const signals = signalsByClient[baseline.clientId] ?? [];
+      const contagion = (contagionByClient[baseline.clientId] ?? []).map((c, i) => contagionFlagToScore(c, i));
+      const registry = registryByClient[baseline.clientId] ?? [];
+      const result = await runPipeline(baseline, [], signals, [...contagion, ...registry]);
+      alerts.push({ caseName: baseline.legalName, baseline, ...result });
+    }
     res.json({ alerts, cost: costSummary(), source });
   } catch (e) {
     res.status(500).json({ error: (e as Error).message });
@@ -134,6 +144,32 @@ app.get("/api/drift-signals", (_req, res) => {
     if (!existsSync(path)) return res.json({ companies: [] });
     const companies = JSON.parse(readFileSync(path, "utf8"));
     res.json({ companies });
+  } catch (e) {
+    res.status(500).json({ error: (e as Error).message });
+  }
+});
+
+// Sanctions screening flags (scrapers/sanctions/kyc_sanctions_flags.json) for the Clusters
+// contagion overlay. Served verbatim — the frontend matches flagged names against graph leaves.
+app.get("/api/sanctions-flags", (_req, res) => {
+  try {
+    const path = new URL("../../scrapers/sanctions/kyc_sanctions_flags.json", import.meta.url);
+    if (!existsSync(path)) return res.json({ flags: [] });
+    const data = JSON.parse(readFileSync(path, "utf8"));
+    res.json({ flags: data.flags ?? [] });
+  } catch (e) {
+    res.status(500).json({ error: (e as Error).message });
+  }
+});
+
+// Corporate registry drift report (scrapers/corporate/kyc_drift_report.json) for the Clusters
+// view — drift-detected companies turn their cluster red; healthy companies show nothing.
+app.get("/api/registry-drift", (_req, res) => {
+  try {
+    const path = new URL("../../scrapers/corporate/kyc_drift_report.json", import.meta.url);
+    if (!existsSync(path)) return res.json({ report: [] });
+    const report = JSON.parse(readFileSync(path, "utf8"));
+    res.json({ report: Array.isArray(report) ? report : [] });
   } catch (e) {
     res.status(500).json({ error: (e as Error).message });
   }

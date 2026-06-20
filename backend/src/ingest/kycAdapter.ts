@@ -35,7 +35,6 @@ function normRisk(r?: string): "low" | "medium" | "high" {
   return "medium";
 }
 
-// Team KYC database lives in docs/ (real, anchored to public footprints).
 const DEFAULT_PATH = new URL("../../../docs/kyc_database.json", import.meta.url);
 
 export function loadBaselines(path: URL | string = DEFAULT_PATH): ClientBaseline[] {
