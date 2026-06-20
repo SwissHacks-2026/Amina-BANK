@@ -131,6 +131,17 @@ export const SEED_ALERTS: Alert[] = [
       recommendedAction: "request enhanced KYC documents",
       allSourcesUsed: ["https://example.com/nordpay-crypto", "internal:tx-monitor:CLT-NORDPAY"],
     },
+    jury: {
+      verdict: "risk_confirmed",
+      confidence: 0.8,
+      prosecutionArgument:
+        "The public relaunch as a 100x crypto derivatives venue directly contradicts the declared EU invoicing-software business, and the $3.3M outbound flow to Seychelles and the Cayman Islands — 10x the expected volume — is exactly the pattern of a business that has moved off-profile into high-risk activity.",
+      defenseArgument:
+        "A single news article and one month of transactions are thin evidence; the volume spike could reflect a legitimate new funding round being deployed, and the relaunch may be a planned, disclosed pivot rather than concealment.",
+      judgeReasoning:
+        "The prosecution outweighs the defense: the business-model contradiction and the offshore cross-border surge corroborate each other, and the defense's benign framing is not supported by any disclosure on record. Identity and source-of-funds must be verified before any de-risking action.",
+      recommendedAction: "request enhanced KYC documents",
+    },
     stageTrace: [
       "Hard gate clear (no sanctions/PEP match).",
       "Embedding gate PASSED → Stage 2 (Haiku): SIG-NORDPAY-PIVOT → risk_increasing (magnitude 85, confidence 0.7).",

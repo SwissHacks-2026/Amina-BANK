@@ -25,6 +25,7 @@ export interface RiskPolicy {
   embeddingGate: { baselineSimMax: number; archetypeSimMin: number };
   signalFilter: { minConfidence: number; minMagnitude: number };
   sanctions: { autoThreshold: number; reviewThreshold: number };
+  jury: { enabled: boolean };
   riskArchetypes: Record<string, string>;
 }
 

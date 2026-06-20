@@ -64,6 +64,11 @@
     "reviewThreshold": 85
   },
 
+  "jury": {
+    "_doc": "adversarial jury on HIGH cases: a prosecutor argues the risk is real, a defense argues it is benign, a judge decides. Adds explainability for the escalated few. Set enabled=false to skip.",
+    "enabled": true
+  },
+
   "riskArchetypes": {
     "_doc": "reference risk-pattern sentences (FATF/AML red flags). Incoming narrative is embedded and compared against each; the closest match hints at which drift dimension applies.",
     "high_leverage_crypto": "High-leverage crypto derivatives trading platform offering up to 100x leverage",

@@ -149,6 +149,18 @@ body { margin: 0; }
 .trace { margin: 0; padding-left: 18px; }
 .trace li { font-family: ui-monospace, Menlo, monospace; font-size: 12px; color: #aab2c0; padding: 3px 0; }
 
+.jury { border-color: #2c3550; background: #14171f; }
+.jury-verdict { font-size: 13px; font-weight: 700; padding: 2px 8px; border-radius: 4px; }
+.jury-risk_confirmed { background: #3a1513; color: #f06a66; }
+.jury-overturned { background: #16301f; color: #5cc285; }
+.jury-uncertain { background: #2a2210; color: #e0c060; }
+.jury-cols { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin: 10px 0; }
+.jury-col { border: 1px solid var(--line); border-radius: 6px; padding: 10px 12px; }
+.jury-pros { border-left: 3px solid #a33f3b; }
+.jury-def { border-left: 3px solid #2f7d4f; }
+.jury-judge { border-top: 1px solid var(--line); padding-top: 10px; }
+.jury-label { font-size: 11px; color: var(--muted); margin-bottom: 4px; font-weight: 600; }
+.jury-col p, .jury-judge p { font-size: 13px; color: #c7ccd6; line-height: 1.5; margin: 0; }
 .deep { border-color: #3a3015; background: #1c1a12; }
 .deep .rec, .rec { margin-top: 10px; font-weight: 600; color: #e0b04a; }
 .deep summary { cursor: pointer; color: var(--muted); font-size: 13px; }

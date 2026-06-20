@@ -379,6 +379,32 @@ function Detail({
         </ol>
       </section>
 
+      {alert.jury && (
+        <section className="card jury">
+          <h3>
+            Adversarial jury — verdict:{" "}
+            <span className={`jury-verdict jury-${alert.jury.verdict}`}>
+              {alert.jury.verdict.replace(/_/g, " ")} ({Math.round(alert.jury.confidence * 100)}%)
+            </span>
+          </h3>
+          <div className="jury-cols">
+            <div className="jury-col jury-pros">
+              <div className="jury-label">⚖ Prosecution (risk is real)</div>
+              <p>{alert.jury.prosecutionArgument}</p>
+            </div>
+            <div className="jury-col jury-def">
+              <div className="jury-label">🛡 Defense (benign explanation)</div>
+              <p>{alert.jury.defenseArgument}</p>
+            </div>
+          </div>
+          <div className="jury-judge">
+            <div className="jury-label">👨‍⚖️ Judge</div>
+            <p>{alert.jury.judgeReasoning}</p>
+            <div className="rec">Recommended: {alert.jury.recommendedAction}</div>
+          </div>
+        </section>
+      )}
+
       {alert.deepAnalysis && (
         <section className="card deep">
           <h3>Stage 3 — deep analysis (Sonnet)</h3>

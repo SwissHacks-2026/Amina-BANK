@@ -418,15 +418,16 @@ sanctions → hard gate; per-signal HITL (validate/dismiss/note); dashboard Demo
 **two-tier sanctions screening** (auto ≥98 / review 85–98 + jurisdiction check + review-queue
 banner); **per-stage hybrid LLM** (Stage 2 local gemma / Stage 3 Claude, policy via
 STAGE2_PROVIDER/STAGE3_PROVIDER); **TSLM-lite** time-series summary injected into Stage 3;
-**drift taxonomy expanded to 19 categories** (weights + recommended actions).
+**drift taxonomy expanded to 19 categories** (weights + recommended actions + archetypes);
+**adversarial Jury** on HIGH cases (prosecutor vs defense → judge, policy-gated `riskPolicy.jury`).
 
 **🔜 My TODOs:** run Giulio `signal_extractor.py` → kyc_drift_signals.json; run Kiara
 `screen_portfolio.py` → sanctions_hits.json; scrapers → Postgres + 24h scheduler; demo script +
 cost table + Q&A; integration→main merge (or present from integration).
 
-**💡 Future:** expand drift taxonomy to ~20 (§5); homonym disambiguation + two-tier fuzzy queue
-(§10); **Jury model** (2 debating models + judge, HIGH only) — jury differentiator; PDF/CSV export;
-contagion via `linked_entities`; regression-fit weights on real outcomes.
+**💡 Future:** PDF/CSV export; contagion via `linked_entities` (Giulio's linked-entity graph);
+regression-fit weights on real labeled outcomes; numeric rules for the remaining new drift
+dimensions; calibrate `riskPolicy.json` to the 10 mock clients.
 
 ---
 

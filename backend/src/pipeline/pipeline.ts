@@ -17,6 +17,7 @@ import { buildArchetypeEmbeddings, embed, scoreNarrativeSignal } from "./embeddi
 import { classifySignal } from "./stage2Classify.js";
 import { computeCompositeScore } from "./scoringEngine.js";
 import { deepAnalyze } from "./stage3DeepAnalysis.js";
+import { runJury, type JuryVerdict } from "./jury.js";
 import { fetchEvidenceViaMCP, type Evidence } from "./mcpNews.js";
 
 export interface PipelineResult {
@@ -25,6 +26,7 @@ export interface PipelineResult {
   evidenceBySignal: Record<string, Evidence[]>;
   stageTrace: string[]; // human-readable "what happened, in order" for the UI/audit
   sanctionsReview?: { candidates: SanctionsReviewCandidate[]; note: string }; // 2-tier review queue
+  jury?: JuryVerdict; // adversarial jury verdict on HIGH cases
 }
 
 export async function runPipeline(
@@ -154,7 +156,13 @@ export async function runPipeline(
     const allEvidence = Object.values(evidenceBySignal).flat();
     const deepAnalysis = await deepAnalyze(baseline, composite, allEvidence, recentTxs);
     stageTrace.push(`HIGH → Stage 3 (Sonnet) deep analysis generated. Recommended: ${deepAnalysis.recommendedAction}.`);
-    return { composite, deepAnalysis, evidenceBySignal, stageTrace, sanctionsReview };
+
+    let jury: JuryVerdict | undefined;
+    if (POLICY.jury.enabled) {
+      jury = await runJury(baseline, composite, allEvidence);
+      stageTrace.push(`Jury (prosecutor vs defense → judge): ${jury.verdict} (confidence ${jury.confidence}).`);
+    }
+    return { composite, deepAnalysis, evidenceBySignal, stageTrace, sanctionsReview, jury };
   }
 
   return { composite, evidenceBySignal, stageTrace, sanctionsReview };

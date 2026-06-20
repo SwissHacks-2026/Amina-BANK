@@ -55,6 +55,14 @@ export interface Alert {
     candidates: { name: string; matchedEntity: string; score: number; source: string }[];
     note: string;
   };
+  jury?: {
+    verdict: "risk_confirmed" | "overturned" | "uncertain";
+    confidence: number;
+    prosecutionArgument: string;
+    defenseArgument: string;
+    judgeReasoning: string;
+    recommendedAction: string;
+  };
 }
 
 export interface Cost {
