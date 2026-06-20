@@ -115,6 +115,8 @@ body { margin: 0; }
 .dir-risk { background: #3a2415; color: #ef8d52; }
 .dir-neutral { background: #232833; color: #8b93a3; }
 .dir-pos { background: #16301f; color: #5cc285; }
+.fraud-badge { font-size: 11px; font-weight: 700; padding: 2px 8px; border-radius: 4px; background: #3a1513; color: #f06a66; border: 1px solid #5e2420; letter-spacing: .3px; }
+.action { margin: 8px 0; font-size: 13px; color: #7fb0e0; }
 
 .bars { display: grid; grid-template-columns: auto 1fr; gap: 6px 12px; align-items: center; margin: 10px 0; max-width: 420px; }
 .bars label { font-size: 11px; color: var(--muted); }

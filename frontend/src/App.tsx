@@ -231,8 +231,12 @@ function Detail({
               <div className="signal-top">
                 <strong>{humanize(s.category)}</strong>
                 <DirectionTag direction={s.direction} />
+                {s.isFraudTypology && <span className="fraud-badge">⚠ FRAUD / AML</span>}
               </div>
               <p className="rationale">{s.rationale}</p>
+              {s.suggestedAction && (
+                <div className="action">▶ Recommended: {s.suggestedAction}</div>
+              )}
               <div className="bars">
                 <label>Magnitude {s.magnitude}</label>
                 <Bar value={s.magnitude} max={100} kind="mag" />

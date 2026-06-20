@@ -7,8 +7,10 @@ export interface SignalScore {
   magnitude: number; // 0-100
   direction: "risk_increasing" | "neutral_update" | "positive" | "unknown";
   rationale: string;
+  suggestedAction: string;
   sourceCitations: string[];
   confidence: number; // 0-1
+  isFraudTypology?: boolean;
 }
 
 export interface ClientBaseline {

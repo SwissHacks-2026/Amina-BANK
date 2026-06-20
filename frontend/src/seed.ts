@@ -35,6 +35,7 @@ export const SEED_ALERTS: Alert[] = [
           confidence: 0.6,
           rationale:
             "Minor adverse mention in crypto press about leverage limits; low materiality and consistent with the declared derivatives business.",
+          suggestedAction: "Trigger enhanced due diligence; escalate to compliance review",
           sourceCitations: ["https://example.com/ostium-series-a"],
         },
       ],
@@ -48,6 +49,7 @@ export const SEED_ALERTS: Alert[] = [
           confidence: 0.8,
           rationale:
             "Funding changed from $3.5M to $20M (~5.7x Series A). Reassess transaction-monitoring thresholds — not risk-increasing on its own.",
+          suggestedAction: "Reassess transaction-monitoring thresholds; update activity profile",
           sourceCitations: ["https://www.crunchbase.com/organization/ostium-labs"],
         },
       ],
@@ -101,6 +103,7 @@ export const SEED_ALERTS: Alert[] = [
           confidence: 0.7,
           rationale:
             "Public relaunch as a high-leverage crypto derivatives venue (up to 100x) contradicts the declared invoicing-software business — a material business-model change requiring re-KYC.",
+          suggestedAction: "Update risk classification; escalate for compliance review",
           sourceCitations: ["https://example.com/nordpay-crypto"],
         },
         {
@@ -112,6 +115,8 @@ export const SEED_ALERTS: Alert[] = [
           confidence: 0.9,
           rationale:
             "Last-30-day volume of $3,300,000 is ~1000% vs the expected $300,000, with 3 outbound transfers to unexpected offshore regions: Seychelles, Cayman Islands.",
+          suggestedAction: "Monitor transactions; flag for AML analyst review",
+          isFraudTypology: true,
           sourceCitations: ["internal:tx-monitor:CLT-NORDPAY"],
         },
       ],
