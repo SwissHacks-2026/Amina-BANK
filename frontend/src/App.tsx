@@ -53,7 +53,12 @@ export function App() {
     setDecided((d) => ({ ...d, [alert.baseline.clientId]: action }));
   }
 
-  async function decideSignal(alert: Alert, signalId: string, category: string, action: "validate" | "dismiss") {
+  async function decideSignal(
+    alert: Alert,
+    signalId: string,
+    category: string,
+    action: "approve" | "reject" | "escalate",
+  ) {
     const { entry } = await postDecision({
       clientId: alert.baseline.clientId,
       actor: "demo-analyst",
@@ -228,7 +233,7 @@ function Detail({
   decided?: string;
   signalDecisions: Record<string, string>;
   signalNotes: Record<string, string>;
-  onSignalDecide: (a: Alert, signalId: string, category: string, action: "validate" | "dismiss") => void;
+  onSignalDecide: (a: Alert, signalId: string, category: string, action: "approve" | "reject" | "escalate") => void;
   onSignalNote: (a: Alert, signalId: string, category: string) => void;
   onBack: () => void;
   onDecide: (a: Alert, action: "approve" | "reject" | "escalate") => void;
@@ -332,16 +337,23 @@ function Detail({
               <div className="signal-hitl">
                 {signalDecisions[s.signalId] ? (
                   <span className={`sig-decided sig-${signalDecisions[s.signalId]}`}>
-                    {signalDecisions[s.signalId] === "validate" ? "✓ validated" : "✗ dismissed"}
+                    {signalDecisions[s.signalId] === "approve"
+                      ? "✓ approved"
+                      : signalDecisions[s.signalId] === "reject"
+                        ? "✗ rejected"
+                        : "↑ escalated"}
                   </span>
                 ) : (
                   <>
                     <span className="sig-hitl-label">Analyst:</span>
-                    <button className="sig-btn sig-validate" onClick={() => onSignalDecide(alert, s.signalId, s.category, "validate")}>
-                      ✓ Validate
+                    <button className="sig-btn sig-approve" onClick={() => onSignalDecide(alert, s.signalId, s.category, "approve")}>
+                      ✓ Approve
                     </button>
-                    <button className="sig-btn sig-dismiss" onClick={() => onSignalDecide(alert, s.signalId, s.category, "dismiss")}>
-                      ✗ Dismiss
+                    <button className="sig-btn sig-reject" onClick={() => onSignalDecide(alert, s.signalId, s.category, "reject")}>
+                      ✗ Reject
+                    </button>
+                    <button className="sig-btn sig-escalate" onClick={() => onSignalDecide(alert, s.signalId, s.category, "escalate")}>
+                      ↑ Escalate
                     </button>
                   </>
                 )}

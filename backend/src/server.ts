@@ -23,6 +23,24 @@ interface AuditEntry {
 }
 const auditLog: AuditEntry[] = [];
 
+// Landing page so hitting the backend root in a browser isn't a scary "Cannot GET /".
+app.get("/", (_req, res) => {
+  res.type("html").send(`<!doctype html><html><head><meta charset="utf-8">
+<title>AMINA backend</title>
+<style>body{font-family:-apple-system,sans-serif;background:#0f1115;color:#e6e8ec;max-width:640px;margin:40px auto;padding:0 20px}
+a{color:#4a7dff}code{background:#1d212a;padding:2px 6px;border-radius:4px}</style></head><body>
+<h2>◆ AMINA backend is running</h2>
+<p>This is the API server — there is no page here. The dashboard is the frontend (<code>http://localhost:5173</code>).</p>
+<p>Endpoints:</p>
+<ul>
+<li><a href="/api/health">/api/health</a> — status</li>
+<li><a href="/api/demo/alerts">/api/demo/alerts</a> — 3 demo cases</li>
+<li><a href="/api/portfolio/alerts">/api/portfolio/alerts</a> — team portfolio</li>
+<li><a href="/api/cost">/api/cost</a> — cost readout</li>
+<li><a href="/api/audit">/api/audit</a> — audit log</li>
+</ul></body></html>`);
+});
+
 app.get("/api/health", (_req, res) => {
   res.json({ ok: true, llm: isLiveLLM() ? "live" : "stub", time: new Date().toISOString() });
 });

@@ -88,6 +88,9 @@ model**; `ANTHROPIC_API_KEY` runs it on Claude; absent both → deterministic st
 - **Hybrid (recommended):** `OLLAMA_MODEL=gemma3:4b` + `ANTHROPIC_API_KEY` + `STAGE3_PROVIDER=anthropic`
   → Stage 2 free local (high volume), Stage 3 Claude (quality where it matters).
 - **All-quality:** `ANTHROPIC_API_KEY` only.
+- **Swiss-sovereign:** `STAGE3_PROVIDER=apertus` + `APERTUS_API_KEY` → Stage 3 runs on **Apertus**
+  (Swiss open LLM, EPFL/ETH/CSCS) — keeps reasoning on a Swiss/European model, a strong
+  data-sovereignty story for a Swiss bank. Pairs well with local gemma on Stage 2 (zero US cloud).
 The Jury reuses this: prosecutor/defense on the Stage-2 tier, judge on the Stage-3 tier.
 
 **KR.** Stage 2는 **무료 로컬 gemma 또는 유료 Haiku 둘 다 지원** — env로 선택. 권장은 **하이브리드**
@@ -433,9 +436,9 @@ STAGE2_PROVIDER/STAGE3_PROVIDER); **TSLM-lite** time-series summary injected int
 **adversarial Jury** on HIGH cases (prosecutor vs defense → judge, policy-gated `riskPolicy.jury`);
 **Postgres 24h ingestion** (`db:ingest` / `scheduler` / `db:status`, interval via INGEST_INTERVAL_MS).
 
-**🔜 My TODOs:** run Giulio `signal_extractor.py` → kyc_drift_signals.json; run Kiara
-`screen_portfolio.py` → sanctions_hits.json; scrapers → Postgres + 24h scheduler; demo script +
-cost table + Q&A; integration→main merge (or present from integration).
+**🔜 My TODOs:** set up Postgres + test the ingestion flow (`db:init` → `db:ingest` → `db:status`);
+run Giulio `signal_extractor.py` → kyc_drift_signals.json; run Kiara `screen_portfolio.py` →
+sanctions_hits.json; demo script + Q&A; integration→main merge (or present from integration).
 
 **💡 Future:** PDF/CSV export; contagion via `linked_entities` (Giulio's linked-entity graph);
 regression-fit weights on real labeled outcomes; numeric rules for the remaining new drift

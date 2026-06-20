@@ -16,6 +16,11 @@ const PRICING: Record<string, { in: number; out: number }> = {
 const OLLAMA_MODEL = process.env.OLLAMA_MODEL; // e.g. "gemma3:4b" — set this to run free
 const OLLAMA_URL = process.env.OLLAMA_URL ?? "http://localhost:11434/api/generate";
 
+// Apertus — Swiss sovereign open LLM (EPFL/ETH/CSCS). OpenAI-compatible API. A strong
+// data-sovereignty story for a Swiss bank: reasoning stays on a Swiss/European model.
+const APERTUS_BASE_URL = process.env.APERTUS_BASE_URL ?? "https://api.publicai.co/v1";
+const APERTUS_MODEL = process.env.APERTUS_MODEL ?? "swiss-ai/apertus-70b-instruct";
+
 export const costLog: CostLogEntry[] = [];
 
 function nowISO(): string {
@@ -29,7 +34,7 @@ function getClient(): Anthropic | null {
   return client;
 }
 
-export type LLMMode = "ollama" | "anthropic" | "stub";
+export type LLMMode = "ollama" | "anthropic" | "apertus" | "stub";
 
 // Default (auto) mode: ollama if a local model is set, else anthropic, else stub.
 export function llmMode(): LLMMode {
@@ -45,6 +50,7 @@ export function llmMode(): LLMMode {
 export function stageMode(stage: 2 | 3): LLMMode {
   const override = (stage === 2 ? process.env.STAGE2_PROVIDER : process.env.STAGE3_PROVIDER)?.toLowerCase();
   if (override === "anthropic" && process.env.ANTHROPIC_API_KEY) return "anthropic";
+  if (override === "apertus" && process.env.APERTUS_API_KEY) return "apertus";
   if (override === "ollama" && OLLAMA_MODEL) return "ollama";
   if (override === "stub") return "stub";
   return llmMode();
@@ -77,6 +83,32 @@ async function callAnthropic(model: string, system: string, user: string, maxTok
   });
   const text = res.content.filter((b) => b.type === "text").map((b) => (b as { text: string }).text).join("");
   return { text, model, inputTokens: res.usage.input_tokens, outputTokens: res.usage.output_tokens };
+}
+
+async function callApertus(system: string, user: string, maxTokens: number) {
+  const res = await fetch(`${APERTUS_BASE_URL}/chat/completions`, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${process.env.APERTUS_API_KEY}`, "Content-Type": "application/json" },
+    body: JSON.stringify({
+      model: APERTUS_MODEL,
+      messages: [
+        { role: "system", content: system },
+        { role: "user", content: user },
+      ],
+      max_tokens: maxTokens,
+    }),
+  });
+  if (!res.ok) throw new Error(`Apertus ${res.status}: ${await res.text()}`);
+  const data = (await res.json()) as {
+    choices: Array<{ message: { content: string } }>;
+    usage?: { prompt_tokens?: number; completion_tokens?: number };
+  };
+  return {
+    text: data.choices[0]!.message.content,
+    model: APERTUS_MODEL,
+    inputTokens: data.usage?.prompt_tokens ?? 0,
+    outputTokens: data.usage?.completion_tokens ?? 0,
+  };
 }
 
 async function callOllama(model: string, system: string, user: string, maxTokens: number) {
@@ -117,7 +149,9 @@ export async function callLLM(opts: {
       const r =
         mode === "ollama"
           ? await callOllama(OLLAMA_MODEL!, opts.system, opts.user, opts.maxTokens)
-          : await callAnthropic(opts.model, opts.system, opts.user, opts.maxTokens);
+          : mode === "apertus"
+            ? await callApertus(opts.system, opts.user, opts.maxTokens)
+            : await callAnthropic(opts.model, opts.system, opts.user, opts.maxTokens);
       logCost(opts.stage, r.model, r.inputTokens, r.outputTokens, opts.signalId);
       return { text: r.text, live: true };
     } catch (e) {
@@ -128,7 +162,7 @@ export async function callLLM(opts: {
   const text = opts.stub();
   logCost(
     opts.stage,
-    mode === "ollama" ? (OLLAMA_MODEL ?? "ollama") : opts.model,
+    mode === "ollama" ? (OLLAMA_MODEL ?? "ollama") : mode === "apertus" ? APERTUS_MODEL : opts.model,
     Math.ceil((opts.system.length + opts.user.length) / 4),
     Math.ceil(text.length / 4),
     opts.signalId,
