@@ -136,7 +136,7 @@ export async function runPipeline(
   // ── Escalate only HIGH to Stage 3 (Sonnet) ──
   if (composite.riskFlag === "high") {
     const allEvidence = Object.values(evidenceBySignal).flat();
-    const deepAnalysis = await deepAnalyze(baseline, composite, allEvidence);
+    const deepAnalysis = await deepAnalyze(baseline, composite, allEvidence, recentTxs);
     stageTrace.push(`HIGH → Stage 3 (Sonnet) deep analysis generated. Recommended: ${deepAnalysis.recommendedAction}.`);
     return { composite, deepAnalysis, evidenceBySignal, stageTrace };
   }

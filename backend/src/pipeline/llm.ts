@@ -31,10 +31,23 @@ function getClient(): Anthropic | null {
 
 export type LLMMode = "ollama" | "anthropic" | "stub";
 
+// Default (auto) mode: ollama if a local model is set, else anthropic, else stub.
 export function llmMode(): LLMMode {
   if (OLLAMA_MODEL) return "ollama";
   if (process.env.ANTHROPIC_API_KEY) return "anthropic";
   return "stub";
+}
+
+// Per-stage mode for the hybrid setup. STAGE2_PROVIDER / STAGE3_PROVIDER can force
+// "ollama" | "anthropic" | "stub"; unset (or "auto") falls back to llmMode().
+// Hybrid example: OLLAMA_MODEL=gemma3:4b + STAGE3_PROVIDER=anthropic + ANTHROPIC_API_KEY=...
+//   → Stage 2 free (gemma), Stage 3 high-quality (Claude).
+export function stageMode(stage: 2 | 3): LLMMode {
+  const override = (stage === 2 ? process.env.STAGE2_PROVIDER : process.env.STAGE3_PROVIDER)?.toLowerCase();
+  if (override === "anthropic" && process.env.ANTHROPIC_API_KEY) return "anthropic";
+  if (override === "ollama" && OLLAMA_MODEL) return "ollama";
+  if (override === "stub") return "stub";
+  return llmMode();
 }
 
 export function isLiveLLM(): boolean {
@@ -97,7 +110,7 @@ export async function callLLM(opts: {
   signalId: string;
   stub: () => string;
 }): Promise<{ text: string; live: boolean }> {
-  const mode = llmMode();
+  const mode = stageMode(opts.stage);
 
   if (mode !== "stub") {
     try {

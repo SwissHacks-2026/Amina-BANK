@@ -10,6 +10,7 @@ export function buildStage3User(
   baseline: ClientBaseline,
   compositeResult: CompositeScoreResult,
   allEvidence: Array<{ sourceUrl: string; text: string }>,
+  timeSeriesSummary: string,
 ): string {
   const signals = compositeResult.contributingSignals
     .map((s) => `- ${s.category} | ${s.direction} | magnitude ${s.magnitude} | ${s.rationale}`)
@@ -23,6 +24,9 @@ COMPOSITE SCORE RESULT
 Score: ${compositeResult.compositeScore}/100  (flag: ${compositeResult.riskFlag})
 Contributing signals:
 ${signals}
+
+TRANSACTION TIME-SERIES (reason over this together with the news below)
+${timeSeriesSummary}
 
 ALL EVIDENCE COLLECTED
 ${evidence}

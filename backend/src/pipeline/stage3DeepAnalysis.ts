@@ -1,7 +1,8 @@
 // Stage 3 — Claude Sonnet 4.6, escalated cases only. Keyless stub fallback.
-import type { ClientBaseline, CompositeScoreResult, DeepAnalysisReport } from "../types.js";
+import type { ClientBaseline, CompositeScoreResult, DeepAnalysisReport, TransactionRecord } from "../types.js";
 import { callLLM, extractJSON } from "./llm.js";
 import { buildStage3User, STAGE3_SYSTEM } from "../prompts/stage3.js";
+import { summarizeTransactions } from "./timeseries.js";
 import type { Evidence } from "./mcpNews.js";
 
 const MODEL = "claude-sonnet-4-6";
@@ -17,8 +18,10 @@ export async function deepAnalyze(
   baseline: ClientBaseline,
   compositeResult: CompositeScoreResult,
   allEvidence: Evidence[],
+  recentTxs: TransactionRecord[] = [],
 ): Promise<DeepAnalysisReport> {
-  const user = buildStage3User(baseline, compositeResult, allEvidence);
+  const timeSeriesSummary = summarizeTransactions(baseline, recentTxs);
+  const user = buildStage3User(baseline, compositeResult, allEvidence, timeSeriesSummary);
 
   const { text } = await callLLM({
     stage: 3,
