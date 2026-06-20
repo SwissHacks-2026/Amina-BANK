@@ -1,60 +1,102 @@
-// Adapter: Alice's corporate registry drift report (scrapers/corporate/kyc_drift_report.json)
-// → our RawSignal[] (sourceType "registry" → narrative route → embedding gate → Stage 2).
-// Her checker compares the live registry (GLEIF/OpenCorporates) against the KYC baseline and
-// emits negative_alerts when something structural changed (status, officers, jurisdiction).
+// Adapter: Alice's corporate-registry drift report (scrapers/corporate/kyc_drift_report.json)
+// → deterministic, pre-scored signals. comparedata.py compares the KYC baseline against live
+// registry APIs (Companies House / ZEFIX / GLEIF / ACRA) and emits free-text "negative_alerts".
+// Registry data is authoritative (it's a public-registry fact, not an LLM judgement), so — like
+// sanctions — these bypass the embedding gate / Stage-2 classifier and feed the score directly.
 //
-// Her output: [{ company_name, status: "HEALTHY"|"DRIFT DETECTED", negative_alerts: string[],
-//   missing_info_warnings: string[], raw_api_data: {...} }]
+// Each alert is routed to a DIFFERENT category + severity by what it says:
+//   "Critical Status Change: -> 'DISSOLVED'"          → entity_status_change   (critical)
+//   "Jurisdiction Moved: 'X' -> 'Y'"                  → jurisdiction_change    (high)
+//   "Entity Identity Change: 'X' -> 'Y'"              → entity_name_change     (medium-high)
+//   "<role> changed/removed: ..."                     → key_personnel_change   (medium)
 import { existsSync, readFileSync } from "node:fs";
-import type { RawSignal, SignalCategory } from "../types.js";
+import type { ClientBaseline, SignalCategory, SignalScore } from "../types.js";
 import { normName } from "./sanctionsAdapter.js";
 
-interface RegistryReport {
+interface RegistryEntry {
   company_name: string;
-  status?: string;
+  status?: string; // "HEALTHY" | "DRIFT DETECTED"
   negative_alerts?: string[];
   missing_info_warnings?: string[];
+  raw_api_data?: { jurisdiction?: string; company_status?: string };
 }
 
-const DEFAULT_PATH = new URL("../../../scrapers/corporate/kyc_drift_report.json", import.meta.url);
+export const DEFAULT_REGISTRY_PATH = new URL(
+  "../../../scrapers/corporate/kyc_drift_report.json",
+  import.meta.url,
+);
 
-// Pick the drift category from the alert wording (registry alerts are short, keyword-rich).
-function categoryFor(alerts: string[]): SignalCategory {
-  const text = alerts.join(" ").toLowerCase();
-  if (/(ceo|cfo|director|officer|personnel)/.test(text)) return "key_personnel_change";
-  if (/(dissolved|status|struck|liquidat|inactive)/.test(text)) return "legal_form_change";
-  if (/(jurisdiction|moved|relocat|domicile)/.test(text)) return "jurisdiction_change";
-  if (/(name change|renamed|formerly)/.test(text)) return "entity_name_change";
-  return "negative_news";
+// Status keywords that mean the legal entity is gone/impaired — top severity.
+const TERMINAL_STATUS = /dissolved|liquidat|struck off|deregister|insolven|administration|wound up|terminated|revoked/;
+
+/** Route one registry alert string to its category + severity. */
+function classifyRegistryAlert(alert: string, i: number, jurisdiction?: string): SignalScore {
+  const a = alert.toLowerCase();
+  let category: SignalCategory;
+  let magnitude: number;
+  let action: string;
+
+  if (a.startsWith("critical status change")) {
+    category = "entity_status_change";
+    const terminal = TERMINAL_STATUS.test(a);
+    magnitude = terminal ? 95 : 82;
+    action = terminal
+      ? "Freeze activity; the registered entity is no longer active — confirm dissolution/liquidation and initiate offboarding or re-KYC."
+      : "Verify the registry status change and reassess whether the relationship can continue.";
+  } else if (a.startsWith("jurisdiction moved")) {
+    category = "jurisdiction_change";
+    magnitude = 75;
+    action = "Enhanced due diligence; re-screen beneficial ownership against the new jurisdiction's risk profile.";
+  } else if (a.startsWith("entity identity change")) {
+    category = "entity_name_change";
+    magnitude = 65;
+    action = "Trigger KYC refresh; confirm the legal-name change is a legitimate rebrand, not entity substitution.";
+  } else if (/\b(changed|removed):/.test(a)) {
+    category = "key_personnel_change";
+    magnitude = 55;
+    action = "Re-verify management; update KYC personnel records and re-screen new/departed officers.";
+  } else {
+    // Unknown registry alert shape → conservative medium signal rather than dropping it.
+    category = "entity_status_change";
+    magnitude = 50;
+    action = "Review the registry change and reassess the client's structural risk.";
+  }
+
+  return {
+    signalId: `registry-${i}`,
+    category,
+    method: "rule_diff",
+    magnitude,
+    direction: "risk_increasing",
+    rationale: `Registry drift${jurisdiction ? ` (${jurisdiction})` : ""}: ${alert}. Public-registry data no longer matches the KYC baseline.`,
+    suggestedAction: action,
+    sourceCitations: [`registry:${jurisdiction ?? "public-registry"}`],
+    confidence: 0.95,
+    isFraudTypology: false,
+  };
 }
 
 /**
- * Returns { clientId → RawSignal[] }. clientId is resolved from the company name via the
- * baselines' legalName (nameToId). Companies that are HEALTHY / unmatched are skipped.
+ * Returns { clientId → SignalScore[] } from the registry drift report. Only companies with
+ * negative_alerts produce signals (HEALTHY entries map to nothing). Empty if the file is absent.
  */
-export function loadRegistrySignals(
-  nameToId: Map<string, string>,
-  path: URL | string = DEFAULT_PATH,
-): Record<string, RawSignal[]> {
-  if (!existsSync(path)) return {};
-  const reports = JSON.parse(readFileSync(path, "utf8")) as RegistryReport[];
-  const out: Record<string, RawSignal[]> = {};
+export function loadRegistryDriftScores(
+  baselines: ClientBaseline[],
+  path: URL | string = DEFAULT_REGISTRY_PATH,
+): Record<string, SignalScore[]> {
+  if (!existsSync(path)) return {}; // generated by scrapers/corporate/comparedata.py
+  const report = JSON.parse(readFileSync(path, "utf8")) as RegistryEntry[];
+  const byLegalName = new Map<string, string>(); // normName(legalName) → clientId
+  for (const b of baselines) byLegalName.set(normName(b.legalName), b.clientId);
 
-  for (const r of reports) {
-    const alerts = r.negative_alerts ?? [];
-    if (!alerts.length) continue; // HEALTHY → nothing to flag
-    const clientId = nameToId.get(normName(r.company_name));
-    if (!clientId) continue; // not in our portfolio
-    const signal: RawSignal = {
-      signalId: `registry-${clientId}`,
-      clientId,
-      category: categoryFor(alerts),
-      detectedAt: "2026-06-20",
-      sourceType: "registry",
-      sourceUrl: "registry:corporate-checker",
-      rawText: `Corporate registry drift for ${r.company_name}: ${alerts.join(" | ")}`,
-    };
-    (out[clientId] ??= []).push(signal);
+  const out: Record<string, SignalScore[]> = {};
+  for (const entry of report) {
+    const alerts = entry.negative_alerts ?? [];
+    if (!alerts.length) continue;
+    const clientId = byLegalName.get(normName(entry.company_name));
+    if (!clientId) continue;
+    const jur = entry.raw_api_data?.jurisdiction;
+    out[clientId] = alerts.map((alert, i) => classifyRegistryAlert(alert, i, jur));
   }
   return out;
 }

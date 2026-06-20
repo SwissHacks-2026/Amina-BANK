@@ -25,6 +25,8 @@ export const RECOMMENDED_ACTIONS: Record<SignalCategory, string> = {
   rapid_geographic_expansion: "Reassess transaction-monitoring thresholds and geographic risk",
   unexplained_volume_surge: "Trigger AML review; validate source of funds",
   negative_sentiment: "Monitor adverse media; escalate if corroborated",
+  sanctioned_counterparty: "Review counterparty exposure; verify identity vs. the sanctions record and assess policy breach / SAR",
+  entity_status_change: "Verify registry status; if dissolved/liquidated, freeze activity and initiate offboarding or re-KYC",
 };
 
 // AML/fraud typologies — transaction patterns that are illicit-activity indicators,

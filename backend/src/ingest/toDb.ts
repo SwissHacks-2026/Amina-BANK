@@ -11,38 +11,27 @@ import {
 } from "../db.js";
 import { loadBaselines } from "./kycAdapter.js";
 import { loadDriftSignals } from "./newsAdapter.js";
-import { loadRegistrySignals } from "./corporateAdapter.js";
-import { loadKiaraFlags, normName } from "./sanctionsAdapter.js";
+import { loadKiaraFlags } from "./sanctionsAdapter.js";
 
+// Note: corporate registry drift + sanctions contagion are computed live at request time
+// (server.ts → loadRegistryDriftScores / loadContagionFlags), so they are NOT ingested here.
 export async function ingestToDb(): Promise<{
   baselines: number;
   signals: number;
-  registrySignals: number;
   sanctions: number;
 }> {
   const baselines = loadBaselines();
   for (const b of baselines) await saveBaseline(b);
 
-  // Resolve company names → clientId so registry/name-keyed sources can join the portfolio.
-  const nameToId = new Map(baselines.map((b) => [normName(b.legalName), b.clientId]));
-
-  // Layer-1 narrative signals: Giulio's news + Alice's corporate registry drift.
+  // Layer-1 narrative signals: Giulio's news drift.
   const newsByClient = loadDriftSignals();
-  const registryByClient = loadRegistrySignals(nameToId);
 
   await clearSignals(); // full refresh
   let signals = 0;
-  let registrySignals = 0;
   for (const list of Object.values(newsByClient)) {
     for (const s of list) {
       await saveSignal(s);
       signals += 1;
-    }
-  }
-  for (const list of Object.values(registryByClient)) {
-    for (const s of list) {
-      await saveSignal(s);
-      registrySignals += 1;
     }
   }
 
@@ -51,5 +40,5 @@ export async function ingestToDb(): Promise<{
   await clearSanctionsHits(); // full refresh
   for (const h of flags.values()) await saveSanctionsHit(h);
 
-  return { baselines: baselines.length, signals, registrySignals, sanctions: flags.size };
+  return { baselines: baselines.length, signals, sanctions: flags.size };
 }

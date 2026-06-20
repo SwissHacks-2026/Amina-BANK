@@ -15,7 +15,7 @@ async function main(): Promise<void> {
   const r = await ingestToDb();
   console.log(
     `Ingested into Postgres: ${r.baselines} baselines, ${r.signals} news signals, ` +
-      `${r.registrySignals} registry signals, ${r.sanctions} sanctions watchlist hits.`,
+      `${r.sanctions} sanctions watchlist hits.`,
   );
   await pool.end();
 }

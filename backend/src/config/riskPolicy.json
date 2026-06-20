@@ -32,7 +32,9 @@
     "website_content_change": 5,
     "rapid_geographic_expansion": 6,
     "unexplained_volume_surge": 12,
-    "negative_sentiment": 5
+    "negative_sentiment": 5,
+    "sanctioned_counterparty": 16,
+    "entity_status_change": 18
   },
 
   "transactionRules": {

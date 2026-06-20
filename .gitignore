@@ -5,6 +5,10 @@
 .env.*
 !**/.env.example
 
+swisshacks/
+# root-anchored: ignore the old top-level pipeline/ dir, NOT backend/src/pipeline/ source
+/pipeline/
+
 # node
 node_modules/
 dist/

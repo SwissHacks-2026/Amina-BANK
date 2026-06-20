@@ -7,6 +7,8 @@
 
 import type { ClientBaseline } from "../types.js";
 import { loadKiaraFlags, loadSanctionsHits, normName, type SanctionsHit } from "../ingest/sanctionsAdapter.js";
+import { loadDirectSanctionsHits } from "../ingest/sanctionsFlagsAdapter.js";
+import { loadBaselines } from "../ingest/kycAdapter.js";
 import { POLICY } from "./policy.js";
 
 export interface SanctionsReviewCandidate {
@@ -45,7 +47,18 @@ async function getSanctionsHits(): Promise<Map<string, SanctionsHit>> {
       // fall through to file-based loading
     }
   }
-  cachedHits = new Map([...loadSanctionsHits(), ...loadKiaraFlags()]);
+  const merged = new Map<string, SanctionsHit>([...loadSanctionsHits(), ...loadKiaraFlags()]);
+  // Also fold in DIRECT customer/UBO hits from Kiara's screening report (kyc_sanctions_flags.json).
+  // Only names that ARE a customer or UBO drive the gate; linked-entity contagion is handled in the
+  // pipeline (it must not auto-CRITICAL the customer). Guarded so a missing file never breaks load.
+  try {
+    for (const [key, hit] of loadDirectSanctionsHits(loadBaselines())) {
+      if (!merged.has(key)) merged.set(key, hit);
+    }
+  } catch {
+    /* baselines or flags file absent → skip; demo stub remains in effect */
+  }
+  cachedHits = merged;
   return cachedHits;
 }
 

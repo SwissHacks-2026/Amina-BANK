@@ -5,6 +5,27 @@
 //   - articles deduped by url (the source data has exact duplicates)
 //   - distinct roles for the same entity are merged onto the one leaf
 
+export type SentimentLabel = "negative" | "neutral" | "positive";
+
+// Per-article risk-polarity sentiment (scrapers/news-feed/sentiment_enrich.py).
+export interface SignalSentiment {
+  label: "adverse" | "neutral" | "benign";
+  risk_polarity: number; // 0..1, higher = more adverse for the company
+  tone_compound: number; // raw VADER tone [-1..+1]
+  drivers: string[];
+  method: string;
+}
+
+// Company-level rollup (the `sentiment_score` object on each company).
+export interface CompanySentiment {
+  score: number; // -1 adverse .. +1 favourable
+  label: SentimentLabel | "no_data";
+  risk_polarity: number;
+  adverse_ratio: number;
+  article_count: number;
+  distribution: { adverse: number; neutral: number; benign: number };
+}
+
 export interface RawArticle {
   dimension: string;
   linked_entities?: { name: string; role: string }[];
@@ -14,12 +35,14 @@ export interface RawArticle {
   source: string;
   summary: string;
   full_text: string;
+  sentiment?: SignalSentiment;
 }
 export interface RawCompany {
   company_id: string;
   legal_name: string;
   articles_screened: number;
   kept_count: number;
+  sentiment_score?: CompanySentiment;
   signals: RawArticle[];
 }
 
@@ -31,6 +54,7 @@ export interface ArticleRef {
   source: string;
   summary: string;
   full_text: string;
+  sentiment?: SignalSentiment;
 }
 
 export interface HubNode {
@@ -43,11 +67,45 @@ export interface HubNode {
   articles: ArticleRef[]; // all company articles, deduped by url
   dimensions: string[];
   hue: number;
+  sentiment?: CompanySentiment; // company-level news sentiment rollup (heat-map fill)
+  registryDrift?: { alerts: string[] }; // set when the registry report flags this company (red cluster)
 }
 
 export interface RelatedEntity {
   id: string;
   name: string;
+}
+
+// ── Sanctions screening (scrapers/sanctions/kyc_sanctions_flags.json) ──
+export interface SanctionMatch {
+  score: number;
+  matched_name: string;
+  source: string;
+  list_name: string;
+  programs: string[];
+}
+export interface SanctionFlag {
+  name: string;
+  kind?: string; // "KYC company" | "Linked entity"
+  contexts?: { linked_to?: string; role?: string; dimension?: string; title?: string; url?: string }[];
+  matches?: SanctionMatch[];
+}
+// The overlay attached to a graph leaf when its entity matches a screening flag.
+export interface LeafSanction {
+  matchedName: string;
+  score: number;
+  source: string;
+  listName: string;
+  programs: string[];
+  tier: "confirmed" | "review"; // ≥ auto-block threshold → confirmed; else human-review
+}
+
+// ── Corporate registry drift (scrapers/corporate/kyc_drift_report.json) ──
+export interface RegistryDriftEntry {
+  company_name: string;
+  status?: string; // "HEALTHY" | "DRIFT DETECTED"
+  negative_alerts?: string[];
+  raw_api_data?: { jurisdiction?: string; company_status?: string };
 }
 
 export type ParentKind = "hub" | "category" | "leaf";
@@ -70,6 +128,8 @@ export interface LeafNode {
   dimensions: string[];
   hue: number;
   related: RelatedEntity[]; // other entities named in this entity's role(s) — e.g. a person → their firm
+  sentiment?: { score: number; label: SentimentLabel }; // aggregated news sentiment for this entity
+  sanction?: LeafSanction; // set when this entity matches a sanctions-screening flag (contagion)
 }
 
 // A synthetic role-type bubble (Investors / Regulators / Partners …) that groups the
@@ -248,6 +308,7 @@ function toArticle(s: RawArticle): ArticleRef {
     source: s.source,
     summary: s.summary,
     full_text: s.full_text,
+    sentiment: s.sentiment,
   };
 }
 
@@ -255,7 +316,30 @@ function byDateDesc(a: ArticleRef, b: ArticleRef) {
   return (b.published_at || "").localeCompare(a.published_at || "");
 }
 
-export function buildGraph(companies: RawCompany[]): Graph {
+// Aggregate a set of articles into one signed sentiment score in [-1, +1]:
+// negative = adverse coverage, positive = favourable. Each article contributes
+// `tone_compound - risk_polarity` (clamped), mirroring the company-level rollup
+// in scrapers/news-feed/sentiment_enrich.py so leaves and hubs agree.
+export function aggregateSentiment(
+  articles: ArticleRef[],
+): { score: number; label: SentimentLabel } | undefined {
+  const vals = articles.map((a) => a.sentiment).filter((s): s is SignalSentiment => !!s);
+  if (!vals.length) return undefined;
+  const signed = vals.map((s) => Math.max(-1, Math.min(1, s.tone_compound - s.risk_polarity)));
+  const score = signed.reduce((a, b) => a + b, 0) / signed.length;
+  const label: SentimentLabel = score >= 0.25 ? "positive" : score <= -0.25 ? "negative" : "neutral";
+  return { score, label };
+}
+
+// Score at/above this auto-block threshold is a high-confidence match; below it is a
+// review-tier (likely-homonym) candidate. Mirrors backend POLICY.sanctions.autoThreshold.
+const SANCTIONS_AUTO_THRESHOLD = 98;
+
+export function buildGraph(
+  companies: RawCompany[],
+  flags: SanctionFlag[] = [],
+  registry: RegistryDriftEntry[] = [],
+): Graph {
   const hubs: HubNode[] = [];
   const categories: CategoryNode[] = [];
   const leaves: LeafNode[] = [];
@@ -311,6 +395,7 @@ export function buildGraph(companies: RawCompany[]): Graph {
       articles: hubArticles,
       dimensions: hubDims,
       hue,
+      sentiment: co.sentiment_score,
     });
     links.push({ source: "center", target: hubId, kind: "spoke", companyId: co.company_id });
 
@@ -336,6 +421,7 @@ export function buildGraph(companies: RawCompany[]): Graph {
         dimensions: [...new Set(arts.map((a) => a.dimension))],
         hue,
         related: [],
+        sentiment: aggregateSentiment(arts),
       };
     });
     const leafById = new Map(companyLeaves.map((l) => [l.id, l]));
@@ -415,6 +501,50 @@ export function buildGraph(companies: RawCompany[]): Graph {
       links.push({ source: l.parentId, target: l.id, kind: "leaf", companyId: co.company_id });
     }
   });
+
+  // ── Sanctions contagion overlay: tag any leaf whose entity matches a screening flag ──
+  const flagByKey = new Map<string, LeafSanction>();
+  for (const f of flags) {
+    const best = (f.matches ?? []).slice().sort((a, b) => (b.score ?? 0) - (a.score ?? 0))[0];
+    if (!best) continue;
+    const key = canonicalKey(f.name);
+    if (!key) continue;
+    flagByKey.set(key, {
+      matchedName: best.matched_name,
+      score: best.score,
+      source: best.source,
+      listName: best.list_name,
+      programs: best.programs ?? [],
+      tier: best.score >= SANCTIONS_AUTO_THRESHOLD ? "confirmed" : "review",
+    });
+  }
+  if (flagByKey.size) {
+    for (const l of leaves) {
+      for (const variant of [l.name, ...l.aliases]) {
+        const hit = flagByKey.get(canonicalKey(variant));
+        if (hit) {
+          l.sanction = hit;
+          break;
+        }
+      }
+    }
+  }
+
+  // ── Registry drift overlay: tag hubs whose registry status is DRIFT DETECTED (red cluster).
+  //    HEALTHY companies are left untouched (nothing shown).
+  const driftByKey = new Map<string, string[]>();
+  for (const r of registry) {
+    const detected = (r.status ?? "").toUpperCase().includes("DRIFT") || (r.negative_alerts?.length ?? 0) > 0;
+    if (!detected) continue;
+    const key = canonicalKey(r.company_name);
+    if (key) driftByKey.set(key, r.negative_alerts ?? []);
+  }
+  if (driftByKey.size) {
+    for (const h of hubs) {
+      const alerts = driftByKey.get(canonicalKey(h.name));
+      if (alerts) h.registryDrift = { alerts };
+    }
+  }
 
   return {
     center: { id: "center", kind: "center", name: "Watchlist" },
