@@ -10,7 +10,7 @@ pip install -r ../../requirements.txt
 ```
 
 - First run of the NER step downloads the GLiNER model (~1.5 GB) to `~/.cache/huggingface` (one time).
-- The screening step needs a local Ollama with `gemma3:4b` (`ollama pull gemma3:4b`).
+- The screening step needs a local Ollama with `gemma3:4b` (`ollama pull gemma3:4b`) and the verifier `tomng/lfm2.5-instruct:1.2b` (`ollama pull tomng/lfm2.5-instruct:1.2b`).
 - Brave augmentation needs an API key in `config/brave.key.local` (gitignored) or the `BRAVE_API_KEY` env var.
 
 ## Run
@@ -50,7 +50,7 @@ All generated data — `news.json`, `news_entities.json`, `selected/`,
 1. **news_pipeline.py** — fetches all RSS feeds concurrently, keeps the last 720h (~30 days), resolves Google News links, scrapes article text (trafilatura), dedups, writes one JSON.
 2. **entity_extractor.py** — runs GLiNER (`company` label) over each article's `clean_text` and adds a `companies` field (`name`, `score`, `mentions`). Prints the top companies as a quality check.
 3. **article_selection.py** — `--kyc-db` selects, for every customer in the KYC DB, the articles where it appears as an entity, writing one `selected/<company_id>.json` each. (Single-company mode `article_selection.py "Apple"` still works, writing `selected_articles.json`.) Matching is open (case/punctuation-insensitive, token-subsequence), so `Apple` matches `Apple Inc.` and `apple` but not `Snapple`.
-4. **signal_extractor.py** — for each customer, screens its selected articles **plus Brave News results** (`"<company> news"`, last month, top 20, scraped the same way) with `gemma3:4b` in parallel. Gemma answers a single question per article — does this bring a notable change that could make the risk profile diverge? — and for kept articles records the drift `dimension` and any `linked_entities` (other players tied to the change). Output per company lists the kept articles with `dimension`, `linked_entities`, `source` (`rss`/`brave`), `summary`, and `full_text`.
+4. **signal_extractor.py** — for each customer, screens its selected articles **plus Brave News results** (`"<company> news"`, last month, top 20, scraped the same way) with `gemma3:4b` in parallel. Gemma answers a single question per article — does this bring a notable change that could make the risk profile diverge? — and for kept articles records the drift `dimension` and any `linked_entities` (other players tied to the change). A second, fast pass then re-checks each kept article with `tomng/lfm2.5-instruct:1.2b` using the **company name + headline only**, dropping "random cluster" articles where the company isn't really the subject (e.g. an Air Force One story that only involves Boeing as the plane maker). The verifier fails open — it only drops headlines it's confident are off-topic; disable with `--no-verify`. Output per company lists the kept articles with `dimension`, `linked_entities`, `source` (`rss`/`brave`), `summary`, and `full_text`.
 
 You can still run any stage directly, e.g. `python3 helpers/signal_extractor.py --company Boeing`.
 
@@ -59,5 +59,5 @@ You can still run any stage directly, e.g. `python3 helpers/signal_extractor.py 
 - **Feeds:** edit `config/rss_sources.txt` (one URL per line, `#` for comments).
 - **Lookback / workers:** `LOOKBACK_HOURS`, `MAX_WORKERS` in `helpers/news_pipeline.py`.
 - **NER model / threshold:** `MODEL_NAME`, `THRESHOLD` in `helpers/entity_extractor.py` (swap to `urchade/gliner_small-v2.1` for speed).
-- **Screening:** `MODEL_NAME`, `MIN_MENTIONS`, `MAX_ARTICLE_CHARS` in `helpers/signal_extractor.py`. Flags: `--no-brave`, `--brave-count`, `--workers`, `--company`, `--max-articles`.
+- **Screening:** `MODEL_NAME` (Gemma), `VERIFY_MODEL` (LFM verifier), `MIN_MENTIONS`, `MAX_ARTICLE_CHARS` in `helpers/signal_extractor.py`. Flags: `--no-brave`, `--brave-count`, `--workers`, `--company`, `--max-articles`, `--no-verify`.
 - **Brave parallelism:** real concurrency needs the Ollama server started with `OLLAMA_NUM_PARALLEL=4` (otherwise requests queue server-side).

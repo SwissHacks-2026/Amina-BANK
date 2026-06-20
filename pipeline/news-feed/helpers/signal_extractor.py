@@ -42,6 +42,14 @@ OUTPUT_FILE = BASE_DIR / "kyc_drift_signals.json"
 OLLAMA_URL = "http://localhost:11434/api/generate"
 MODEL_NAME = "gemma3:4b"
 
+# Second-stage verifier. After Gemma keeps an article (reading its full text), a
+# tiny, fast model re-checks the company + HEADLINE only, to drop "random
+# cluster" articles where the company is not really the subject (e.g. a headline
+# about Air Force One that only involves Boeing as the plane maker). Title-only
+# on a 1.2B model is a cheap noise filter, not a precise judge — so it fails open
+# (keeps) on any error, and only drops headlines it is confident are off-topic.
+VERIFY_MODEL = "tomng/lfm2.5-instruct:1.2b"
+
 # How much article body to show the model. 4B models stay sharper on shorter
 # context, and the lead of a news story carries the material facts anyway.
 MAX_ARTICLE_CHARS = 2000
@@ -109,10 +117,10 @@ def load_json(path, what):
         raise SystemExit(f"Failed to read {path}: {exc}")
 
 
-def query_llm(prompt, retries=1):
+def query_llm(prompt, retries=1, model=MODEL_NAME):
     """Call Ollama in JSON mode and parse the response, retrying once on junk."""
     payload = {
-        "model": MODEL_NAME,
+        "model": model,
         "format": "json",
         "stream": False,
         "options": {"temperature": 0},
@@ -128,6 +136,22 @@ def query_llm(prompt, retries=1):
             if attempt == retries:
                 return None
     return None
+
+
+VERIFY_PROMPT = """You filter news headlines for a KYC review of "{company}".
+
+Keep the headline ONLY if it is about {company} itself (its ticker symbol or short name counts as {company}). Drop it if {company} is absent from the headline, is just one of several companies listed, or the headline is mainly about a different company, a person, a government, or general markets.
+
+Headline: "{title}"
+Respond ONLY as JSON: {{"keep": true or false}}"""
+
+
+def verify_keep(company, title):
+    """Title-only second opinion: should this kept article survive? Fails open."""
+    result = query_llm(VERIFY_PROMPT.format(company=company, title=title), model=VERIFY_MODEL)
+    if not isinstance(result, dict) or "keep" not in result:
+        return True  # verifier glitch — don't drop a Gemma signal over it
+    return bool(result["keep"])
 
 
 def clean_linked_entities(raw):
@@ -240,7 +264,23 @@ def gather_articles(customer, rss_articles, max_articles, use_brave, brave_count
     return combined
 
 
-def assess_company(customer, articles, workers):
+def verify_signals(customer, signals, workers):
+    """Second pass: drop kept articles the title-only verifier rules off-topic."""
+    legal_name = customer.get("legal_name", "")
+    with ThreadPoolExecutor(max_workers=workers) as pool:
+        verdicts = list(pool.map(
+            lambda s: verify_keep(legal_name, s.get("title", "")), signals
+        ))
+    survivors = [s for s, keep in zip(signals, verdicts) if keep]
+    dropped = [s for s, keep in zip(signals, verdicts) if not keep]
+    if dropped:
+        print(f"  verify ({VERIFY_MODEL.split('/')[-1]}): dropped {len(dropped)} off-topic")
+        for s in dropped:
+            print(f"    - {s.get('title', '')[:72]}")
+    return survivors
+
+
+def assess_company(customer, articles, workers, verify=True):
     """Screen one customer's prepared article set in parallel; keep the drift ones."""
     if not articles:
         print("  nothing to screen.")
@@ -261,6 +301,10 @@ def assess_company(customer, articles, workers):
                 signals.append(signal)
             print(f"\r  screening {done}/{total} | kept {len(signals)}", end="", flush=True)
     print()
+
+    # Second-stage title-only verification to drop off-topic clusters.
+    if verify and signals:
+        signals = verify_signals(customer, signals, workers)
 
     # Stable output: group by dimension, then by recency.
     signals.sort(key=lambda s: (s["dimension"], s.get("published_at", "")), reverse=True)
@@ -286,6 +330,8 @@ def main():
                         help="Skip Brave News augmentation (RSS-selected articles only)")
     parser.add_argument("--brave-count", type=int, default=brave_search.DEFAULT_COUNT,
                         help=f"Brave results per company (default {brave_search.DEFAULT_COUNT})")
+    parser.add_argument("--no-verify", action="store_true",
+                        help=f"Skip the {VERIFY_MODEL} title-only verification pass")
     args = parser.parse_args()
 
     customers = load_json(KYC_FILE, "this is the KYC database of customers to monitor.")
@@ -306,15 +352,17 @@ def main():
         if not customers:
             raise SystemExit(f"No KYC customer matches '{args.company}'.")
 
+    verify = not args.no_verify
     print(f"Customers to assess: {len(customers)}")
     print(f"Model:               {MODEL_NAME}  ({args.workers} workers)")
     print(f"Brave augmentation:  {'on' if use_brave else 'off'}")
+    print(f"Title verification:  {VERIFY_MODEL if verify else 'off'}")
 
     report = []
     for customer in customers:
         rss = load_selected(customer.get("company_id")) or []
         articles = gather_articles(customer, rss, args.max_articles, use_brave, args.brave_count)
-        matched, signals = assess_company(customer, articles, args.workers)
+        matched, signals = assess_company(customer, articles, args.workers, verify=verify)
         report.append({
             "company_id": customer.get("company_id"),
             "legal_name": customer.get("legal_name"),
