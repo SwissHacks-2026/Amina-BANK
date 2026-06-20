@@ -8,6 +8,7 @@ import { costSummary, isLiveLLM } from "./pipeline/llm.js";
 import { demoCases } from "./data/sampleData.js";
 import { loadBaselines } from "./ingest/kycAdapter.js";
 import { loadDriftSignals } from "./ingest/newsAdapter.js";
+import { loadTransactions } from "./ingest/txAdapter.js";
 import { loadAllBaselines, loadAllSignals, pingDb } from "./db.js";
 import type { ClientBaseline, RawSignal, TransactionRecord } from "./types.js";
 
@@ -74,12 +75,29 @@ app.get("/api/portfolio/alerts", async (_req, res) => {
       signalsByClient = loadDriftSignals();
       source = "json-files";
     }
+    // Synthetic transaction history per client (Layer-2 numeric signals → ruleDiff typologies).
+    const txByClient = loadTransactions();
     // Score all clients concurrently — each runPipeline is independent, so this turns the
     // wall-clock from sum-of-clients into slowest-single-client (matters with a live LLM).
     const alerts = await Promise.all(
       baselines.map(async (baseline) => {
         const signals = signalsByClient[baseline.clientId] ?? [];
-        const result = await runPipeline(baseline, [], signals);
+        const txs = txByClient[baseline.clientId] ?? [];
+        // A transaction-sourced trigger signal makes the pipeline run the numeric ruleDiff
+        // checks (structuring / mule / dormancy) over the client's tx history.
+        const withTx = txs.length
+          ? [
+              ...signals,
+              {
+                signalId: `tx-trigger-${baseline.clientId}`,
+                clientId: baseline.clientId,
+                category: "cross_border_anomaly" as const,
+                detectedAt: "2026-06-20",
+                sourceType: "transaction" as const,
+              },
+            ]
+          : signals;
+        const result = await runPipeline(baseline, txs, withTx);
         return { caseName: baseline.legalName, baseline, ...result };
       }),
     );

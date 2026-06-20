@@ -93,8 +93,25 @@ model**; `ANTHROPIC_API_KEY` runs it on Claude; absent both → deterministic st
   data-sovereignty story for a Swiss bank. Pairs well with local gemma on Stage 2 (zero US cloud).
 The Jury reuses this: prosecutor/defense on the Stage-2 tier, judge on the Stage-3 tier.
 
+**Two-model FREE stack (zero API keys) / 무료 2-모델 스택.** The two ML jobs already have free
+Hugging Face models:
+- **Filtering / embeddings** — `Xenova/all-MiniLM-L6-v2` via Transformers.js (`EMBED_BACKEND=transformers`).
+  Free, local, no key. **Already on.** This is the "transformer model" half.
+- **Reasoning (Stage 2/3)** — **Gemma** (`OLLAMA_MODEL=gemma3:4b`) via Ollama. Free, local, no key.
+  Replaces Apertus/Claude.
+
+So the fully-free combo = **MiniLM (filtering) + Gemma (reasoning)**, both HF, $0, no keys.
+⚠️ **Practical note:** run Gemma via **Ollama** (fast quantized server: `brew install ollama` →
+`ollama pull gemma3:4b` → `ollama serve`), NOT via Transformers.js — a 2–4B chat model in
+Node/WASM is far too slow for reasoning over ~90 signals (Transformers.js is fine for the small
+MiniLM embedding model only). 임베딩은 Transformers.js(MiniLM)로 무료, 추론 Gemma는 Ollama로 돌려야 빠름.
+
+**Current default (this session):** Stage 3 + jury on **Apertus** (`STAGE3_PROVIDER=apertus`,
+sovereignty story); Stage 2 on `stub` until Ollama is installed. Embeddings already on free MiniLM.
+To go fully free: install Ollama, set `OLLAMA_MODEL=gemma3:4b`, blank `STAGE2_PROVIDER`/`STAGE3_PROVIDER`/`APERTUS_API_KEY`.
+
 **KR.** Stage 2는 **무료 로컬 gemma 또는 유료 Haiku 둘 다 지원** — env로 선택. 권장은 **하이브리드**
-(Stage 2 로컬 무료 + Stage 3 Claude 고품질). 비싼 모델은 위험한 소수만.
+(Stage 2 로컬 무료 + Stage 3 Claude/Apertus 고품질). 비싼 모델은 위험한 소수만.
 
 Cost tier order (cheapest first):
 ```
@@ -325,6 +342,56 @@ riskFlag = score < 30 ? low : score < 60 ? medium : high      (hard gate → cri
 - **Weight provenance**: aligned to FATF/Basel risk-factor tiers + calibrated on README scenarios.
   Future: regression-fit on real labeled outcomes.
 
+### 9.1 The actual weights / 실제 가중치 (`riskPolicy.signalWeights`)
+
+| Weight | Dimension(s) | Tier — why / 왜 |
+|---|---|---|
+| 20 | business_model_pivot | **Highest.** Client becomes a *different company* than onboarded. 온보딩과 다른 회사가 됨 |
+| 16 | pep_exposure | FATF high-risk: politically exposed person. PEP 고위험 |
+| 15 | ownership_change · nominee_ownership | Hidden control / beneficial-owner change. 실소유주 은닉 |
+| 14 | cross_border_anomaly · structuring_pattern | Active AML typologies (mule, smurfing). 능동적 자금세탁 전형 |
+| 12 | legal_regulatory_action · unexplained_volume_surge | Real but not definitive. 실재하나 확정 아님 |
+| 10 | jurisdiction_change | Structural but can be legitimate. 구조적이나 합법 가능 |
+| 8 | dormancy_break · negative_news · legal_form_change | Moderate. 중간 |
+| 6 | key_personnel_change · rapid_geographic_expansion | Often benign. 흔히 양성 |
+| 3–5 | domain · entity_name · website · sentiment · funding_scale | **Lowest** — cosmetic/weak. 표면적·약함 |
+
+`MAX_WEIGHT = 20`, `softeningFactor = 0.3`, `flagBands = { mediumFrom: 30, highFrom: 60 }`.
+
+### 9.2 How a score is built — two levels / 점수 계산 2단계
+
+**EN.** `weight/MAX_WEIGHT` is **one dimension's** weight ÷ 20 (NOT a sum) — it normalizes importance to
+0–1. The **sum (Σ) happens across signals**, not across weights:
+```
+LEVEL 1 (per signal):  contribution = magnitude × (thisWeight / 20) × confidence
+LEVEL 2 (across fired signals):  compositeScore = Σ contributions   → clamp [0,100] → riskFlag
+```
+**KR.** `weight/MAX_WEIGHT`는 **한 차원의 가중치 ÷ 20** (합 아님) — 중요도를 0~1로 정규화. **합산(Σ)은
+신호들 사이에서** 일어남(가중치를 더하는 게 아님). 차원이 발화하면 → 그 기여도를 전부 더해 → 총점 → 플래그.
+
+### 9.3 Worked example — NordPay (scored 100 → HIGH) / 계산 예시
+
+| Dimension | magnitude | weight | conf | contribution = m × (w/20) × c |
+|---|---|---|---|---|
+| business_model_pivot | 81 | 20 | 0.62 | 81 × 1.00 × 0.62 = **50.2** |
+| cross_border_anomaly | 100 | 14 | 0.90 | 100 × 0.70 × 0.90 = **63.0** |
+| dormancy_break | 61 | 8 | 0.85 | 61 × 0.40 × 0.85 = **20.7** |
+
+`Σ = 50.2 + 63.0 + 20.7 = 133.9 → clamp 100 → HIGH`. **EN.** The news pivot (50) *alone* = MEDIUM;
+added to the two transaction typologies it crosses 60 → HIGH. That's the "news + transaction combine"
+in numbers. **KR.** 뉴스 신호만(50)이면 MEDIUM, 거래 전형 2개를 더하면 60 넘어 HIGH — "뉴스+거래 합산"의 수치적 증거.
+
+### 9.4 Honest provenance / 솔직한 출처
+
+**EN.** Be precise with a judge: the tier **ordering** follows FATF/Basel (real standards — BO opacity &
+PEP are high-risk). The **exact integers** (20, 16, …) and the **30/60 bands** are **expert-set policy**
+in a swappable config, **calibrated on the README's 10 scenarios — not extracted from a paper, not yet
+data-fitted** (regression-fit on labeled outcomes is the stated next step). 60-for-HIGH is deliberate:
+one top-weight high-confidence high-magnitude signal alone reaches HIGH (e.g. business_model_pivot
+100 × 1.0 × 0.6 = 60). **KR.** 심사에서 정확히: **순서(tier)**는 FATF/Basel(실제 표준) 근거. **숫자(20,16…)와
+30/60 경계**는 **전문가가 설정한 정책값**(교체 가능한 config), README 10개 시나리오로 보정 — **논문에서 뽑은 게 아니고,
+아직 데이터로 학습한 것도 아님**(라벨 데이터 회귀학습이 다음 단계). 60=HIGH는 의도적 — 최고가중치 신호 하나로도 HIGH 도달.
+
 ---
 
 ## 10. Sanctions & homonym disambiguation / 제재·동명이인
@@ -437,6 +504,30 @@ Stage 3, cost table last.
 ## 16. Progress & roadmap / 진행·로드맵 (2026-06-20)
 
 **Latest changes & solutions / 최근 변경·해결 (this session):**
+- **End-to-end pipeline proof (`npm run health`).** A single check (`src/pipelineHealth.ts`)
+  traces every link — source files → Postgres → Layer-2 txs → pipeline scoring → REST API →
+  frontend — and prints PASS/FAIL. Latest run: **18 passed, 0 failed → PIPELINE HEALTHY** (10/10
+  clients scored, flags discriminating 9 high/1 medium, 3 transaction typologies fire). This is the
+  reproducible way to show a teammate the whole system works.
+- **LLM provider is a hot-swappable env switch (`STAGE2_PROVIDER`/`STAGE3_PROVIDER`).** Values:
+  `anthropic` (Claude — fast, reliable, recommended for the demo), `apertus` (Swiss LLM — sovereignty
+  story, but the free `api.publicai.co` tier was returning 504/404 this session, making the portfolio
+  crawl to ~130s), `ollama` (free local Gemma), `stub` (deterministic template, no AI — instant, free,
+  never fails; rationale tagged `[STUB]`). When Apertus went down we set `STAGE3_PROVIDER=stub` so the
+  demo stays fast/stable; switch to `anthropic` (with key) for fast real reasoning. The slowness was
+  the external LLM, **not** the pipeline (health check stays green on stub).
+- **Synthetic transaction history wired into the live portfolio (Layer-2 numeric).** Real bank
+  transaction data is private, so we generate it (`data/generators/genTransactions.ts` →
+  `data/synthetic_transactions.json`, loaded by `txAdapter`) **anchored to** each client's real
+  KYC baseline (expected volume + jurisdiction → `expectedCounterpartyRegions`, now set from
+  jurisdiction in `kycAdapter`) and to the **FATF/AML typology thresholds** in `riskPolicy`
+  (CTR $10k, structuring band, 180-day dormancy, 0.8 pass-through). 7 of 10 clients are clean;
+  3 carry an injected typology matching their story — **Terraform** (dormancy-break + money-mule,
+  collapse), **Bybit** (structuring), **JPEX** (money-mule). The portfolio appends a
+  `sourceType:"transaction"` trigger signal so `ruleDiff` runs; verified discriminating (7 clean /
+  3 dirty). **Honest framing:** synthetic but profile-anchored — plugs into a real bank's
+  transaction feed unchanged. *(AML = Anti-Money-Laundering; the 3 patterns are classic laundering
+  typologies the rules catch.)*
 - **All Layer-1 sources → Postgres → pipeline → API.** `db:ingest` now loads KYC baselines
   (`docs/kyc_database.json`), Giulio's news, Alice's corporate registry drift
   (`scrapers/corporate/kyc_drift_report.json` → `registry` signals), and Kiara's
@@ -500,6 +591,8 @@ npm run demo:ingest             # team KYC db + news → pipeline
 npm run demo:live -- "Wirecard AG"   # one real-news case (needs EVENTREGISTRY_API_KEY)
 npm run eval                    # accuracy: predicted vs injected ground-truth (5/5)
 npx tsx src/testSanctions.ts    # isolated sanctions hard-gate test (5 name-match cases)
+npm run health                  # END-TO-END proof: files→DB→pipeline→API→frontend (PASS/FAIL)
+npm run gen:tx                  # regenerate synthetic transactions (data/synthetic_transactions.json)
 npm run generate                # multi-model synthetic data (needs ≥1 provider key)
 npm run db:init                 # create Postgres tables (needs DATABASE_URL)
 

@@ -21,7 +21,8 @@ yarn-error.log*
 .idea/
 
 # Sanctions list source files (large, refreshed periodically — not committed)
-data/
+# NOTE: root-anchored so it does NOT ignore source dirs like backend/src/data/
+/data/
 # Parsed/indexed cache built from the raw source files
 .cache/
 

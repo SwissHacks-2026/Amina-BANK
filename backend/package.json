@@ -16,7 +16,9 @@
     "db:ingest": "tsx src/dbIngest.ts",
     "db:status": "tsx src/dbStatus.ts",
     "scheduler": "tsx src/scheduler.ts",
-    "demo:ingest": "tsx src/demoIngest.ts"
+    "demo:ingest": "tsx src/demoIngest.ts",
+    "gen:tx": "tsx src/data/generators/genTransactions.ts",
+    "health": "tsx src/pipelineHealth.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.32.1",

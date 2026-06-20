@@ -36,6 +36,19 @@ function normRisk(r?: string): "low" | "medium" | "high" {
 }
 
 // Team KYC database lives in docs/ (real, anchored to public footprints).
+// Expected counterparty regions implied by the client's jurisdiction — the "normal" trading
+// partners declared at onboarding. Outbound to anything OUTSIDE this set is what the cross-border
+// AML check treats as anomalous. (Empty here would make every payment look cross-border.)
+function regionsFor(jurisdiction?: string): string[] {
+  const j = (jurisdiction ?? "").toUpperCase();
+  if (j.startsWith("US")) return ["United States", "European Union", "United Kingdom", "Canada"];
+  if (j.startsWith("GB") || j.includes("UK") || j.includes("KINGDOM"))
+    return ["United Kingdom", "European Union", "United States"];
+  if (j.startsWith("CH") || j.includes("SWITZER")) return ["Switzerland", "European Union", "United States"];
+  if (j.includes("HONG") || j === "HK") return ["Hong Kong", "China", "Singapore", "United States"];
+  return ["United States", "European Union", "United Kingdom"];
+}
+
 const DEFAULT_PATH = new URL("../../../docs/kyc_database.json", import.meta.url);
 
 export function loadBaselines(path: URL | string = DEFAULT_PATH): ClientBaseline[] {
@@ -54,7 +67,7 @@ export function loadBaselines(path: URL | string = DEFAULT_PATH): ClientBaseline
       .join(". "),
     expectedMonthlyTxCount: 100,
     expectedMonthlyVolumeUSD: parseMonthlyVolume(k.kyc_baseline?.expected_activity_and_volumes),
-    expectedCounterpartyRegions: [],
+    expectedCounterpartyRegions: regionsFor(k.jurisdiction),
     // key personnel become screenable names (UBO slot) so the hard gate checks them too
     ubos: Object.values(k.key_personnel ?? {}).map((name) => ({ name, ownershipPct: 0, isPEP: false })),
     riskRating: normRisk(k.kyc_baseline?.risk_rating),
