@@ -11,18 +11,21 @@
     "demo": "tsx src/demo.ts",
     "demo:live": "tsx src/liveDemo.ts",
     "generate": "tsx src/data/generators/generate.ts",
-    "eval": "tsx src/eval/runEval.ts"
+    "eval": "tsx src/eval/runEval.ts",
+    "db:init": "tsx src/dbInit.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.32.1",
     "cors": "^2.8.5",
     "dotenv": "^16.4.5",
-    "express": "^4.21.2"
+    "express": "^4.21.2",
+    "pg": "^8.22.0"
   },
   "devDependencies": {
     "@types/cors": "^2.8.17",
     "@types/express": "^5.0.0",
     "@types/node": "^22.10.0",
+    "@types/pg": "^8.20.0",
     "tsx": "^4.19.2",
     "typescript": "^5.7.2"
   }
