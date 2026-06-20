@@ -7,6 +7,8 @@
 
 import type { ClientBaseline } from "../types.js";
 import { loadSanctionsHits, normName } from "../ingest/sanctionsAdapter.js";
+import { loadDirectSanctionsHits } from "../ingest/sanctionsFlagsAdapter.js";
+import { loadBaselines } from "../ingest/kycAdapter.js";
 import { POLICY } from "./policy.js";
 
 export interface SanctionsReviewCandidate {
@@ -27,6 +29,18 @@ export interface HardGateResult {
 // Real OFAC/UN hits produced by Kiara's bridge (scrapers/sanctions/screen_portfolio.py).
 // Empty until that file exists; then it takes priority over the demo stub.
 const REAL_HITS = loadSanctionsHits();
+
+// Also pull DIRECT customer/UBO hits from Kiara's screening report (kyc_sanctions_flags.json).
+// Only names that ARE a customer or UBO drive the gate here; linked-entity contagion is handled
+// in the pipeline (it must not auto-CRITICAL the customer). Guarded so a missing baselines/flags
+// file never breaks module load — the demo stub still works.
+try {
+  for (const [key, hit] of loadDirectSanctionsHits(loadBaselines())) {
+    if (!REAL_HITS.has(key)) REAL_HITS.set(key, hit);
+  }
+} catch {
+  /* baselines or flags file absent → skip; demo stub remains in effect */
+}
 
 // Demo stub list (for the bundled demo cases not present on real lists).
 const DEMO_SANCTIONS = new Set(

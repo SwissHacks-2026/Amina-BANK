@@ -32,7 +32,7 @@ function normRisk(r?: string): "low" | "medium" | "high" {
   return "medium";
 }
 
-const DEFAULT_PATH = new URL("../../../data/kyc_database.json", import.meta.url);
+const DEFAULT_PATH = new URL("../../../docs/kyc_database.json", import.meta.url);
 
 export function loadBaselines(path: URL | string = DEFAULT_PATH): ClientBaseline[] {
   const raw = JSON.parse(readFileSync(path, "utf8")) as ExternalKyc[];
